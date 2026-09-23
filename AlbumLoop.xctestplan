@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "5B7E1F7A-6C2B-4B7E-9C39-3F2F2E8A1D01",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:AlbumLoopCore",
+        "identifier" : "AlbumLoopCoreTests",
+        "name" : "AlbumLoopCoreTests"
+      }
+    }
+  ],
+  "version" : 1
+}
