@@ -6,7 +6,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
-> **Status:** the code builds for the tvOS device SDK and the tvOS Simulator, and the playback logic is covered by 34 automated tests using a fake image provider. **Nothing about real iCloud loading has been verified on a physical Apple TV yet.** See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
+> **Status:** the playback logic is covered by 34 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works and photos stored only in iCloud download through public PhotoKit (11 of 11 sampled). **Full playback cycles, network loss, and long runs have not been verified on the device yet.** See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 
 ---
 
@@ -31,7 +31,7 @@ Sources checked on 2026‑09‑22: the tvOS 27.0 SDK headers in Xcode 27.0 (`Pho
 **Must still be validated on a real Apple TV** (the tvOS Simulator has no iCloud Photos library):
 
 1. That `.albumRegular` returns your iCloud Photos albums on tvOS, with correct photo counts.
-2. That `requestImage` with network access actually downloads photos that aren't on the Apple TV, in a 300 GB library on a device with 32 GB of storage. Use **Test iCloud Loading** in the app.
+2. That `requestImage` with network access actually downloads photos that aren't on the Apple TV, in a 300 GB library on a device with 32 GB of storage. Use **Test iCloud Loading** in the app. *Confirmed on 2026‑09‑24 on an Apple TV HD, tvOS 26.6: 11 of 11 sampled cloud-only photos downloaded, median 0.8 s.*
 3. That PhotoKit's unsorted album fetch matches the album's order in Photos (see [Ordering](#ordering)).
 4. Download times and memory behaviour on your specific hardware and network.
 5. The Settings paths quoted in the app's permission messages.
@@ -275,7 +275,7 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Siri Remote input (left/right, Play/Pause, click, Back) | — | ⚠️ **Not yet exercised.** Needs a person with a remote, in the Simulator or on the device |
 | Album enumeration against a real iCloud library | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 157 albums listed in 0.4 s; counts and covers filled in within 9 s |
 | Album counts match Photos | Physical Apple TV | ❌ **Not yet compared** (checklist 2.2) |
-| Downloading photos that aren't on the device | Physical Apple TV | ❌ **Not verified** |
+| Downloading photos that aren't on the device | Apple TV HD (AppleTV5,3), tvOS 26.6, **Test iCloud Loading** | ✅ 12 sampled: 1 on device, 11 not on device; 11/11 downloaded at screen size (median 0.8 s, slowest 2.0 s). This is a 12-photo sample, not a full cycle |
 | Full cycles, network loss, memory, and screen-saver behaviour | Physical Apple TV | ❌ **Not verified** |
 
 No claim about iCloud reliability is made from mocks. Run the [physical-device checklist](docs/DEVICE_TEST_CHECKLIST.md) and record the results there.
