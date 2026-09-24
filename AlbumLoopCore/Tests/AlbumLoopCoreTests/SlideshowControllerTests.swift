@@ -378,6 +378,47 @@ struct SlideshowControllerTests {
         await h.waitForShowing(items[3], position: 3)
     }
 
+    @Test("A photo that failed while prefetching gets fresh retries when playback reaches it")
+    func prefetchFailureRetriedOnArrival() async {
+        let h = Harness(configuration: ImageBuffer.Configuration(retryDelays: [], stallTimeout: .seconds(10_000)))
+        let items = ids(4)
+        h.start(items)
+        await h.provider.succeed(items[0])
+        await h.waitForShowing(items[0])
+        await h.provider.fail(items[1], networkError)
+        await waitUntil { h.controller.imageBuffer?.status(for: items[1]) == .failed(networkError) }
+        #expect(h.controller.phase == .showing, "a prefetch failure doesn't interrupt the current slide")
+
+        h.tick(8)
+        #expect(h.controller.phase == .loading, "not stalled on arrival")
+        await h.provider.succeed(items[1])
+        await h.waitForShowing(items[1], position: 1)
+        #expect(h.provider.requestCount(for: items[1]) == 2)
+    }
+
+    @Test("Loading time and attempt number are reported while waiting, and reset on display")
+    func loadingElapsedAndAttempt() async {
+        let h = Harness()
+        let items = ids(3)
+        h.start(items)
+        await waitUntil { h.provider.hasPending(items[0]) }
+        #expect(h.controller.targetLoadingElapsed == .zero)
+        #expect(h.controller.targetAttempt == 1)
+        h.tick(5)
+        #expect(h.controller.targetLoadingElapsed == .seconds(5))
+
+        await h.provider.fail(items[0], networkError)
+        await waitUntil { h.controller.isRetryingTarget }
+        h.tick(2)
+        await waitUntil { h.controller.targetAttempt == 2 && !h.controller.isRetryingTarget }
+        #expect(h.controller.targetLoadingElapsed == .seconds(7), "elapsed keeps counting across retries")
+
+        await h.provider.succeed(items[0])
+        await h.waitForShowing(items[0])
+        #expect(h.controller.targetLoadingElapsed == nil)
+        #expect(h.controller.targetAttempt == 0)
+    }
+
     // MARK: Stale callbacks
 
     @Test("Late callbacks from a previous session are ignored")

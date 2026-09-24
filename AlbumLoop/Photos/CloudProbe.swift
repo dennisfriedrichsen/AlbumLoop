@@ -84,7 +84,7 @@ final class CloudProbe {
         let slowest = sorted.last.map(Self.format) ?? "–"
         summary = "\(count) sampled: \(localCount) on device, \(cloudOnly) not on device; "
             + "\(downloaded)/\(cloudOnly) downloaded (median \(median), slowest \(slowest))."
-        AlbumLoopLog.loading.info("Cloud probe: \(self.summary, privacy: .public)")
+        AlbumLoopLog.loading.info("Cloud probe: \(self.summary)")
     }
 
     private func request(_ asset: PHAsset, target: CGSize, network: Bool) async throws -> PhotoKitRequest.FinalResult {

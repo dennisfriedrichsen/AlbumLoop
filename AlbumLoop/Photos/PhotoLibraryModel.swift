@@ -114,7 +114,7 @@ final class PhotoLibraryModel {
         hasRequestedAccess = true
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         access = Self.map(status)
-        AlbumLoopLog.library.info("Photos authorization: \(String(describing: self.access), privacy: .public)")
+        AlbumLoopLog.library.info("Photos authorization: \(String(describing: self.access))")
         if access == .authorized || access == .limited {
             startObserving()
         }
@@ -158,7 +158,7 @@ final class PhotoLibraryModel {
         hasLoadedAlbums = true
         let listedAt = clock.now
         AlbumLoopLog.library.info(
-            "Listed \(listed.count) albums in \(String(describing: listedAt - start), privacy: .public)"
+            "Listed \(listed.count) albums in \(String(describing: listedAt - start))"
         )
 
         var timing = AlbumFetcher.Timing()
@@ -179,7 +179,7 @@ final class PhotoLibraryModel {
         }
 
         AlbumLoopLog.library.info(
-            "Counted \(ids.count) albums in \(String(describing: clock.now - listedAt), privacy: .public) (counting \(String(describing: timing.counting), privacy: .public), covers \(String(describing: timing.keyAssets), privacy: .public))"
+            "Counted \(ids.count) albums in \(String(describing: clock.now - listedAt)) (counting \(String(describing: timing.counting)), covers \(String(describing: timing.keyAssets)))"
         )
         isLoadingAlbums = false
         if rescanPending && !defersAlbumRescans {

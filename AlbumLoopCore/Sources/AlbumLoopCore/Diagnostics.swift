@@ -1,13 +1,111 @@
 import Foundation
 import os
 
-/// Local structured logging. Asset identifiers are logged only as short hashes
-/// and nothing leaves the device.
+/// Local structured logging. Asset identifiers are logged only as short hashes,
+/// image contents are never logged, and nothing leaves the device.
+///
+/// Messages go to the unified system log and, once `DiagnosticFileLog.shared`
+/// is configured, to a small rotating file in the app's caches so problems
+/// can be diagnosed after the fact (copy it off with `devicectl`).
 public enum AlbumLoopLog {
     public static let subsystem = "com.dennisfriedrichsen.AlbumLoop"
-    public static let library = Logger(subsystem: subsystem, category: "library")
-    public static let loading = Logger(subsystem: subsystem, category: "loading")
-    public static let playback = Logger(subsystem: subsystem, category: "playback")
+    public static let library = AlbumLoopLogger(category: "library")
+    public static let loading = AlbumLoopLogger(category: "loading")
+    public static let playback = AlbumLoopLogger(category: "playback")
+}
+
+public struct AlbumLoopLogger: Sendable {
+    private let logger: Logger
+    private let category: String
+
+    init(category: String) {
+        self.category = category
+        self.logger = Logger(subsystem: AlbumLoopLog.subsystem, category: category)
+    }
+
+    /// Messages must contain only counts, timings, hashed asset tokens, and error text.
+    public func debug(_ message: String) {
+        logger.debug("\(message)")
+    }
+
+    public func info(_ message: String) {
+        logger.info("\(message)")
+        DiagnosticFileLog.shared.append("I", category, message)
+    }
+
+    public func notice(_ message: String) {
+        logger.notice("\(message)")
+        DiagnosticFileLog.shared.append("N", category, message)
+    }
+
+    public func error(_ message: String) {
+        logger.error("\(message)")
+        DiagnosticFileLog.shared.append("E", category, message)
+    }
+}
+
+/// Bounded on-device log file: `albumloop.log`, rotated to `albumloop.1.log`
+/// at `maxBytes`, so at most about twice that is ever stored.
+public final class DiagnosticFileLog: @unchecked Sendable {
+    public static let shared = DiagnosticFileLog()
+    public static let fileName = "albumloop.log"
+
+    // All mutable state is confined to `queue`.
+    private let queue = DispatchQueue(label: "AlbumLoop.DiagnosticFileLog")
+    private var directory: URL?
+    private var handle: FileHandle?
+    private var size: UInt64 = 0
+    private let maxBytes: UInt64 = 400_000
+    private let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    /// Starts writing to `directory`. Until called, messages only go to the system log.
+    public func configure(directory: URL) {
+        queue.async {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            self.directory = directory
+            self.openFile()
+        }
+    }
+
+    func append(_ level: String, _ category: String, _ message: String) {
+        let date = Date()
+        queue.async {
+            guard let handle = self.handle else { return }
+            let line = "\(self.formatter.string(from: date)) \(level) [\(category)] \(message)\n"
+            let data = Data(line.utf8)
+            try? handle.write(contentsOf: data)
+            self.size += UInt64(data.count)
+            if self.size > self.maxBytes {
+                self.rotate()
+            }
+        }
+    }
+
+    private var fileURL: URL? { directory?.appendingPathComponent(Self.fileName) }
+
+    private func openFile() {
+        guard let url = fileURL else { return }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        handle = try? FileHandle(forWritingTo: url)
+        size = (try? handle?.seekToEnd()) ?? 0
+    }
+
+    private func rotate() {
+        guard let directory, let url = fileURL else { return }
+        try? handle?.close()
+        handle = nil
+        let old = directory.appendingPathComponent("albumloop.1.log")
+        try? FileManager.default.removeItem(at: old)
+        try? FileManager.default.moveItem(at: url, to: old)
+        openFile()
+    }
 }
 
 /// Outcome of one image-request attempt, kept for the diagnostics overlay.

@@ -6,7 +6,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
-> **Status:** the playback logic is covered by 41 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
+> **Status:** the playback logic is covered by 43 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 
 ---
 
@@ -210,7 +210,8 @@ Every input (slide timer, image completion, remote press, network change) arrive
 
 - **Requests:** `deliveryMode = .highQualityFormat`, `isNetworkAccessAllowed = true`, `targetSize` = the TV's native pixel size (e.g. 3840×2160), `contentMode = .aspectFit`. Original camera files are never requested.
 - **Decoding:** each result is drawn off the main thread into an opaque 8‑bit bitmap that fits the screen. That decodes it before display, applies orientation, and caps it at ~33 MB on a 4K TV.
-- **Bounds:** at most 2 concurrent requests. The decoded-memory budget is 7 screen-sized images (~232 MB at 4K, ~58 MB at 1080p). New prefetches aren't started if they could exceed it. The needed image can pre-empt a prefetch for a request slot.
+- **Bounds:** at most 2 concurrent requests. The look-ahead is 6 photos (about 48 s of slides at 8 s each), 3 in Slow Pan (larger images) and 8 in Side by Side (about 4 pairs), plus 2 previous (1 in Slow Pan). The decoded-memory budget is exactly that window at its largest image size: ~83 MB at 1080p and ~330 MB at 4K for the normal styles; up to ~180 MB at 1080p for Slow Pan. New prefetches aren't started if they could exceed it; the image playback is waiting for always loads. The needed image can pre-empt a prefetch for a request slot.
+- **Failures found early:** a photo that fails while being prefetched doesn't interrupt the current slide. When playback reaches it, it gets a fresh round of retries before the Retry/Skip panel appears.
 - **Eviction and cancellation:** anything outside the window is evicted and its request cancelled on every move, on album change, and when leaving playback. Backgrounding cancels prefetches; a memory warning drops everything except the current and on-screen images and shrinks the window.
 - **No persistence:** the app writes no image data to disk. PhotoKit's own caches are system-managed and purgeable; the app never assumes they hold anything, and it doesn't use preheating (`PHCachingImageManager`) as a signal that anything has downloaded.
 
@@ -256,12 +257,19 @@ Every input (slide timer, image completion, remote press, network change) arrive
 
 - **Diagnostics overlay** (turn on in album settings): session, cycle, position, eligible album count, displayed / buffered / loading / pending / failed / skipped / removed counts, decoded memory versus budget, retries, stale callbacks, network state, and the last few requests with attempt number, duration, and outcome.
 - **Logging:** `os.Logger`, subsystem `com.dennisfriedrichsen.AlbumLoop`, categories `library`, `loading`, and `playback`. Asset identifiers are logged only as short one-way hashes; image contents are never logged. Nothing leaves the device. To stream logs from a paired Apple TV, use Console.app and filter on that subsystem.
+- **On-device log file:** the same info-level messages (launch with app version, model and tvOS version; each request, load time and failure; each wait, display, stall, pause and navigation) are also written to `Library/Caches/Diagnostics/albumloop.log` in the app's container. It rotates at 400 KB (one previous file is kept), lives in purgeable Caches, and is never uploaded. After a problem, copy it off the paired Apple TV without restarting the app:
+
+```bash
+xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDataContainer --domain-identifier com.dennisfriedrichsen.AlbumLoop --source Library/Caches/Diagnostics/albumloop.log --destination ./albumloop.log
+```
+
+- **Loading indicator:** after 10 seconds of waiting, the "Loading…" or "retrying…" text also shows the elapsed time and the attempt number (for example "15 s · attempt 3 of 4"), so a slow download is distinguishable from a stuck one.
 
 ---
 
 ## Tests
 
-`AlbumLoopCore/Tests` — 41 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
+`AlbumLoopCore/Tests` — 43 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
 
 | Requirement | Tests |
 |---|---|
@@ -270,7 +278,7 @@ Every input (slide timer, image completion, remote press, network change) arrive
 | Out-of-order completion doesn't reorder playback | `outOfOrderCompletion` |
 | Shuffle doesn't repeat within a cycle, no boundary repeat, history | `shuffleIsPermutation` (5 seeds × 3 cycles), `shuffleBoundary` (300 seeds), `shuffleHistory`, `upcomingAcrossBoundary`, `shuffleCycle` |
 | Pause, and navigation during loading | `pauseKeepsPrefetching`, `navigationDuringLoading`, `navigationWhilePaused` |
-| Failures, retries, explicit skips | `retriesThenStall`, `explicitSkipReported`, `deletedAssetSkipped`, `nothingLoads`, `stallWatchdog`, `retryExhaustion` |
+| Failures, retries, explicit skips | `retriesThenStall`, `explicitSkipReported`, `deletedAssetSkipped`, `nothingLoads`, `stallWatchdog`, `retryExhaustion`, `prefetchFailureRetriedOnArrival`, `loadingElapsedAndAttempt` |
 | Network recovery | `networkRecovery` |
 | Stale callbacks | `staleCallbackFromPreviousSession` (including a photo shared by both albums), `staleCallbackAfterNavigation`, `staleAfterReset` |
 | Buffer bounds | `concurrencyBounded`, `byteBudget`, `neededPreemptsPrefetch`, `eviction`, `memoryPressure` |
@@ -285,8 +293,8 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 
 | Check | Where | Result |
 |---|---|---|
-| Core logic tests (41) | macOS, `swift test` | ✅ Pass (repeated runs) |
-| Core logic tests (41) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
+| Core logic tests (43) | macOS, `swift test` | ✅ Pass (repeated runs) |
+| Core logic tests (43) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
 | App compiles, Swift 6 language mode | tvOS Simulator SDK and **device** SDK (unsigned) | ✅ Builds with no Swift warnings |
 | Welcome screen and empty-library state | tvOS Simulator (Photos permission granted with `simctl`) | ✅ Rendered |
 | Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
@@ -296,7 +304,9 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Album counts match Photos | Physical Apple TV | ❌ **Not yet compared** (checklist 2.2) |
 | Full sequential playback of a large album | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 392-photo album: every photo downloaded and displayed |
 | Vertical styles: layout, pan motion, pairs, crossfade with no black frames | tvOS 26.5 Simulator, `-demoSlideshow -verticalStyle …`, screenshots and frame analysis of screen recordings | ✅ All five styles render; no black or jumping frames at slide changes |
-| Vertical styles on the device (Vision detection, smoothness and memory on Apple TV HD) | Physical Apple TV | ❌ **Not verified** (checklist section 12) |
+| Slow Pan smoothness | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ Smooth (reported by owner) |
+| Vertical styles on the device: Vision framing, memory | Physical Apple TV | ❌ **Not verified** (checklist section 12) |
+| On-device log file written and copied off with `devicectl` | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ |
 | Downloading photos that aren't on the device | Apple TV HD (AppleTV5,3), tvOS 26.6, **Test iCloud Loading** | ✅ 12 sampled: 1 on device, 11 not on device; 11/11 downloaded at screen size (median 0.8 s, slowest 2.0 s). This is a 12-photo sample, not a full cycle |
 | Full cycles, network loss, memory, and screen-saver behaviour | Physical Apple TV | ❌ **Not verified** |
 

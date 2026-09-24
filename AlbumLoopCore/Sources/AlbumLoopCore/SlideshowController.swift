@@ -86,6 +86,8 @@ public final class SlideshowController {
     public private(set) var targetProgress: Double?
     /// True while a photo on the target slide is between automatic retries.
     public private(set) var isRetryingTarget = false
+    /// Highest attempt number among the target slide's photos that are loading (0 if none).
+    public private(set) var targetAttempt = 0
     public private(set) var lastCycleReport: CycleReport?
     /// Short-lived message for the user (cycle summary, album change, network).
     public private(set) var notice: String?
@@ -115,6 +117,12 @@ public final class SlideshowController {
         return phase == .showing ? .zero : settings.slideDuration
     }
 
+    /// How long playback has been waiting for the current target slide, or nil
+    /// if it isn't waiting. Not observable; read it from a `TimelineView`.
+    public var targetLoadingElapsed: Duration? {
+        loadingSince.map { scheduler.now - $0 }
+    }
+
     // MARK: Private state
 
     private let provider: any ImageProviding
@@ -133,6 +141,9 @@ public final class SlideshowController {
     private var noticeTimer: ScheduledWork?
     private var pendingSnapshot: (ids: [AssetID], pairable: Set<AssetID>)?
     private var wasPlayingBeforeBackground = false
+    /// When playback started waiting for the slide identified by `loadingKey`.
+    private var loadingSince: Duration?
+    private var loadingKey: String?
 
     private var displayedThisCycle: Set<AssetID> = []
     private var skippedThisCycle: [AssetID] = []
@@ -193,7 +204,7 @@ public final class SlideshowController {
         total = assetIDs.count
         phase = .loading
         AlbumLoopLog.playback.info(
-            "Session \(session) started: \(assetIDs.count) photos, \(self.sequence?.slideCount ?? 0) slides, order \(self.settings.order.rawValue, privacy: .public)"
+            "Session \(session) started: \(assetIDs.count) photos, \(self.sequence?.slideCount ?? 0) slides, order \(self.settings.order.rawValue)"
         )
         targetChanged(.none)
     }
@@ -217,6 +228,9 @@ public final class SlideshowController {
         cycle = 1
         targetProgress = nil
         isRetryingTarget = false
+        targetAttempt = 0
+        loadingSince = nil
+        loadingKey = nil
         remainingSlideTime = nil
         timerStartedAt = nil
         pendingSnapshot = nil
@@ -236,6 +250,7 @@ public final class SlideshowController {
     public func pause() {
         guard sequence != nil, !isPaused else { return }
         isPaused = true
+        AlbumLoopLog.playback.info("Paused at photo \(targetPosition + 1)")
         if let slideTimer, let timerStartedAt {
             let elapsed = scheduler.now - timerStartedAt
             remainingSlideTime = max(.zero, settings.slideDuration - elapsed)
@@ -248,6 +263,7 @@ public final class SlideshowController {
     public func resume() {
         guard sequence != nil, isPaused else { return }
         isPaused = false
+        AlbumLoopLog.playback.info("Resumed at photo \(targetPosition + 1)")
         startSlideTimerIfNeeded()
     }
 
@@ -255,6 +271,7 @@ public final class SlideshowController {
     /// unavailable photo this is an explicit skip and is recorded as such.
     public func next() {
         guard sequence != nil else { return }
+        AlbumLoopLog.playback.info("User: next (from photo \(targetPosition + 1))")
         switch phase {
         case .stalled:
             skipCurrent()
@@ -268,6 +285,7 @@ public final class SlideshowController {
     /// Moves back one slide within the current cycle.
     public func previous() {
         guard sequence != nil else { return }
+        AlbumLoopLog.playback.info("User: previous (from photo \(targetPosition + 1))")
         switch phase {
         case .loading, .showing, .stalled, .finished:
             retreat()
@@ -279,6 +297,7 @@ public final class SlideshowController {
     /// Tries the stalled photos again with a fresh set of attempts.
     public func retryCurrent() {
         guard let sequence, let buffer else { return }
+        AlbumLoopLog.playback.info("User: retry photo \(targetPosition + 1)")
         if case .stalled = phase {
             phase = .loading
         }
@@ -300,7 +319,7 @@ public final class SlideshowController {
                 skippedThisCycle.append(id)
             }
             excludedThisCycle.insert(id)
-            AlbumLoopLog.playback.notice("User skipped unavailable photo \(id.logToken, privacy: .public)")
+            AlbumLoopLog.playback.notice("User skipped unavailable photo \(id.logToken)")
         }
         if activeIDs(of: sequence).isEmpty {
             advance(navigation: .userForward)
@@ -352,6 +371,7 @@ public final class SlideshowController {
     /// Call when the app leaves the foreground: pauses and cancels prefetching.
     public func enterBackground() {
         guard let sequence else { return }
+        AlbumLoopLog.playback.info("App entered background at photo \(targetPosition + 1)")
         wasPlayingBeforeBackground = !isPaused
         pause()
         buffer?.setWindow(needed: sequence.currentIDs, ahead: [], behind: [], onScreen: displayed?.ids ?? [])
@@ -360,6 +380,7 @@ public final class SlideshowController {
 
     public func enterForeground() {
         guard sequence != nil else { return }
+        AlbumLoopLog.playback.info("App returned to foreground at photo \(targetPosition + 1)")
         refreshWindow()
         if wasPlayingBeforeBackground {
             resume()
@@ -391,7 +412,7 @@ public final class SlideshowController {
         case .wrapped(let completedCycle):
             let report = makeReport(cycle: completedCycle)
             lastCycleReport = report
-            AlbumLoopLog.playback.info("Cycle \(completedCycle) complete: \(report.summary, privacy: .public)")
+            AlbumLoopLog.playback.info("Cycle \(completedCycle) complete: \(report.summary)")
             resetCycleTracking()
             if report.nothingCouldLoad {
                 fail("None of the \(report.total) photos could be displayed. Check the network connection and iCloud Photos on this Apple TV, then try again.")
@@ -407,7 +428,7 @@ public final class SlideshowController {
         case .ended:
             let report = makeReport(cycle: sequence.cycle)
             lastCycleReport = report
-            AlbumLoopLog.playback.info("Slideshow finished: \(report.summary, privacy: .public)")
+            AlbumLoopLog.playback.info("Slideshow finished: \(report.summary)")
             if report.nothingCouldLoad {
                 fail("None of the \(report.total) photos could be displayed. Check the network connection and iCloud Photos on this Apple TV, then try again.")
                 return
@@ -496,12 +517,13 @@ public final class SlideshowController {
                 if !removedThisCycle.contains(id) { removedThisCycle.append(id) }
                 excludedThisCycle.insert(id)
                 removedAny = true
-                AlbumLoopLog.playback.notice("Photo \(id.logToken, privacy: .public) no longer available; skipping")
+                AlbumLoopLog.playback.notice("Photo \(id.logToken) no longer available; skipping")
             case .failed(let error):
                 allReady = false
-                if navigation.isUser {
-                    // Returning to a photo that failed earlier: try it again rather
-                    // than immediately showing an error.
+                if navigation != .none {
+                    // Arriving at a photo that failed earlier (while prefetching, or
+                    // before the user navigated away): conditions may have changed,
+                    // so give it a fresh round of retries before showing an error.
                     buffer.retry(id)
                 } else {
                     failure = failure ?? error
@@ -521,11 +543,32 @@ public final class SlideshowController {
         }
         if let failure {
             phase = .stalled(failure)
+            AlbumLoopLog.playback.notice(
+                "Stalled on photo \(sequence.position + 1) after \(elapsedText()): \(failure.description)"
+            )
         } else {
             phase = .loading
+            let key = "\(sequence.cycle)-\(sequence.slideIndex)"
+            if loadingKey != key {
+                loadingKey = key
+                loadingSince = scheduler.now
+                AlbumLoopLog.playback.info(
+                    "Waiting for photo \(sequence.position + 1) of \(sequence.count) [\(tokens(ids))]"
+                )
+            }
             updateTargetLoadingState()
         }
         publishDiagnostics()
+    }
+
+    private func tokens(_ ids: [AssetID]) -> String {
+        ids.map(\.logToken).joined(separator: ",")
+    }
+
+    private func elapsedText() -> String {
+        guard let elapsed = targetLoadingElapsed else { return "0 s" }
+        let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+        return String(format: "%.1f s", seconds)
     }
 
     /// Moves past a slide with nothing left to show, in the direction of travel.
@@ -550,8 +593,15 @@ public final class SlideshowController {
         )
         displayedThisCycle.formUnion(ids)
         skippedThisCycle.removeAll { ids.contains($0) }
+        AlbumLoopLog.playback.info(
+            "Showing photo \(sequence.position + 1) of \(sequence.count), cycle \(sequence.cycle) [\(tokens(ids))]"
+                + (loadingSince == nil ? " (was ready)" : " after waiting \(elapsedText())")
+        )
+        loadingSince = nil
+        loadingKey = nil
         targetProgress = nil
         isRetryingTarget = false
+        targetAttempt = 0
         phase = .showing
         remainingSlideTime = nil
         refreshWindow()
@@ -580,12 +630,15 @@ public final class SlideshowController {
         guard let sequence, let buffer else { return }
         var progress: [Double] = []
         var retrying = false
+        var attempt = 0
         for id in activeIDs(of: sequence) {
             switch buffer.status(for: id) {
-            case .loading(_, let fraction):
+            case .loading(let current, let fraction):
                 progress.append(fraction)
-            case .waitingToRetry:
+                attempt = max(attempt, current)
+            case .waitingToRetry(let current, _):
                 retrying = true
+                attempt = max(attempt, current)
             case .ready:
                 progress.append(1)
             default:
@@ -595,6 +648,7 @@ public final class SlideshowController {
         let average = progress.isEmpty ? 0 : progress.reduce(0, +) / Double(progress.count)
         targetProgress = average > 0 && average < 1 ? average : nil
         isRetryingTarget = retrying
+        targetAttempt = attempt
     }
 
     private func refreshWindow() {
@@ -641,7 +695,7 @@ public final class SlideshowController {
         cancelSlideTimer()
         buffer?.reset()
         phase = .failed(message)
-        AlbumLoopLog.playback.error("Playback failed: \(message, privacy: .public)")
+        AlbumLoopLog.playback.error("Playback failed: \(message)")
         publishDiagnostics()
     }
 
@@ -696,4 +750,6 @@ public final class SlideshowController {
     /// The photos on the slide playback is on.
     public var currentTargetIDs: [AssetID] { sequence?.currentIDs ?? [] }
     public var imageBuffer: ImageBuffer? { buffer }
+    /// Automatic attempts per photo before playback stalls.
+    public var maxAttempts: Int { bufferConfiguration.maxAttempts }
 }

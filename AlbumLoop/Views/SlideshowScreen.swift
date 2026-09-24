@@ -92,7 +92,7 @@ struct SlideshowScreen: View {
         self.controller = controller
         controller.start(assetIDs: snapshot.ids, pairable: pairable(snapshot))
         AlbumLoopLog.playback.info(
-            "Display target \(size.width)×\(size.height) px, style \(style.rawValue, privacy: .public), \(snapshot.verticalIDs.count) vertical photos"
+            "Display target \(size.width)×\(size.height) px, style \(style.rawValue), \(snapshot.verticalIDs.count) vertical photos"
         )
     }
 

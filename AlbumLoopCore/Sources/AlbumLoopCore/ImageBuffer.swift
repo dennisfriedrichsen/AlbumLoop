@@ -292,7 +292,7 @@ public final class ImageBuffer {
             entry.attempts = max(0, entry.attempts - 1)
             entry.status = .queued
             entries[id] = entry
-            AlbumLoopLog.loading.debug("Preempted prefetch \(id.logToken, privacy: .public)")
+            AlbumLoopLog.loading.debug("Preempted prefetch \(id.logToken)")
             return true
         }
         return false
@@ -330,7 +330,7 @@ public final class ImageBuffer {
         }
         entry.watchdog = scheduleWatchdog(id: id, token: token, after: configuration.stallTimeout)
         entries[id] = entry
-        AlbumLoopLog.loading.debug("Request \(id.logToken, privacy: .public) attempt \(attempt)")
+        AlbumLoopLog.loading.info("Request \(id.logToken) attempt \(attempt)")
         onEvent?(.started(id, attempt: attempt))
     }
 
@@ -381,7 +381,7 @@ public final class ImageBuffer {
     private func finish(id: AssetID, token: UInt64, result: Result<LoadedImage, any Error>) {
         guard var entry = entries[id], entry.token == token, entry.isLoading else {
             stats.staleCallbacks += 1
-            AlbumLoopLog.loading.debug("Ignored stale result for \(id.logToken, privacy: .public)")
+            AlbumLoopLog.loading.info("Ignored stale result for \(id.logToken)")
             return
         }
         entry.watchdog?.cancel()
@@ -396,6 +396,9 @@ public final class ImageBuffer {
             entries[id] = entry
             stats.completedRequests += 1
             record(id: id, attempt: entry.attempts, startedAt: entry.startedAt, outcome: .succeeded)
+            AlbumLoopLog.loading.info(
+                "Loaded \(id.logToken) attempt \(entry.attempts) in \(Self.format(scheduler.now - entry.startedAt)), \(image.pixelSize.width)×\(image.pixelSize.height)"
+            )
             enforceByteBudget()
             onEvent?(.ready(id))
             pump()
@@ -427,7 +430,7 @@ public final class ImageBuffer {
             }
             entries[id] = entry
             AlbumLoopLog.loading.notice(
-                "Attempt \(attempt) failed for \(id.logToken, privacy: .public): \(failure.description, privacy: .public); retrying"
+                "Attempt \(attempt) failed for \(id.logToken): \(failure.description); retrying"
             )
             onEvent?(.retrying(id, attempt: attempt, after: failure))
             pump()
@@ -435,7 +438,7 @@ public final class ImageBuffer {
             entry.status = .failed(failure)
             entries[id] = entry
             AlbumLoopLog.loading.error(
-                "Giving up on \(id.logToken, privacy: .public) after \(attempt) attempts: \(failure.description, privacy: .public)"
+                "Giving up on \(id.logToken) after \(attempt) attempts: \(failure.description)"
             )
             onEvent?(.failed(id, failure))
             pump()
@@ -472,8 +475,13 @@ public final class ImageBuffer {
             total -= image.byteCost
             discard(id)
             priorities.removeAll { $0 == id }
-            AlbumLoopLog.loading.debug("Evicted \(id.logToken, privacy: .public) for byte budget")
+            AlbumLoopLog.loading.debug("Evicted \(id.logToken) for byte budget")
         }
+    }
+
+    static func format(_ duration: Duration) -> String {
+        let seconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        return String(format: "%.2f s", seconds)
     }
 
     private func record(id: AssetID, attempt: Int, startedAt: Duration, outcome: RequestRecord.Outcome) {

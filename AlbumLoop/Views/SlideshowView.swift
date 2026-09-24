@@ -135,8 +135,10 @@ struct SlideshowView: View {
             if controller.phase == .loading && controller.displayed == nil {
                 VStack(spacing: 24) {
                     ProgressView()
-                    Text(loadingText(first: true))
-                        .foregroundStyle(.secondary)
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(loadingText(first: true))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -161,7 +163,9 @@ struct SlideshowView: View {
                         HStack(spacing: 14) {
                             ProgressView()
                                 .scaleEffect(0.6)
-                            Text(loadingText(first: false))
+                            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                                Text(loadingText(first: false))
+                            }
                         }
                         .pill()
                         .transition(.opacity)
@@ -198,16 +202,25 @@ struct SlideshowView: View {
     }
 
     private func loadingText(first: Bool) -> String {
+        var text: String
         if !isNetworkAvailable {
-            return "Waiting for network…"
+            text = "Waiting for network…"
+        } else if controller.isRetryingTarget {
+            text = "Having trouble loading — retrying…"
+        } else if let progress = controller.targetProgress {
+            text = "Downloading from iCloud \(Int(progress * 100))%"
+        } else {
+            text = first ? "Loading first photo…" : "Loading next photo…"
         }
-        if controller.isRetryingTarget {
-            return "Having trouble loading — retrying…"
+        // After a while, show how long and which attempt, so a slow download
+        // is distinguishable from a stuck one.
+        if let elapsed = controller.targetLoadingElapsed, elapsed >= .seconds(10) {
+            text += " \(elapsed.components.seconds) s"
+            if controller.targetAttempt > 1 {
+                text += " · attempt \(controller.targetAttempt) of \(controller.maxAttempts)"
+            }
         }
-        if let progress = controller.targetProgress {
-            return "Downloading from iCloud \(Int(progress * 100))%"
-        }
-        return first ? "Loading first photo…" : "Loading next photo…"
+        return text
     }
 
     // MARK: Panels

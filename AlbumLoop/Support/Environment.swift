@@ -46,17 +46,19 @@ enum DisplayMetrics {
     static func bufferConfiguration(for size: PixelSize, style: VerticalPhotoStyle) -> ImageBuffer.Configuration {
         var configuration = ImageBuffer.Configuration()
         configuration.maxConcurrentLoads = 2
+        // Look-ahead covers slow or retried downloads: 6 photos is ~48 s of slides
+        // at 8 s each (~83 MB at 1080p). Measured median download on an Apple TV HD: 0.8 s.
         switch style {
         case .slowPan:
-            // Pan images are up to twice screen width tall, so hold fewer.
-            configuration.prefetchAhead = 2
+            // Pan images are up to twice screen width tall (~30 MB at 1080p), so hold fewer.
+            configuration.prefetchAhead = 3
             configuration.keepBehind = 1
         case .sideBySide:
-            // Two photos per slide: look further ahead in photos.
-            configuration.prefetchAhead = 4
+            // Two photos per slide: 8 photos is about 4 slides.
+            configuration.prefetchAhead = 8
             configuration.keepBehind = 2
         case .blurredBackground, .smartCrop, .blackBars:
-            configuration.prefetchAhead = 3
+            configuration.prefetchAhead = 6
             configuration.keepBehind = 2
         }
         let perImage = SlideRenderer.estimatedImageBytes(style: style, screen: size)

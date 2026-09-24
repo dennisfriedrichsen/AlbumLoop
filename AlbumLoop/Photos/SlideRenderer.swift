@@ -59,9 +59,14 @@ enum DeviceClass {
     var isOlderModel: Bool { self == .older }
 
     static let current: DeviceClass = {
-        let identifier = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? machineIdentifier()
+        let identifier = modelIdentifier
         return identifier.hasPrefix("AppleTV5,") || identifier.hasPrefix("AppleTV6,") ? .older : .newer
     }()
+
+    /// Hardware model such as "AppleTV5,3" (the simulated model in the simulator).
+    static var modelIdentifier: String {
+        ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? machineIdentifier()
+    }
 
     private static func machineIdentifier() -> String {
         var info = utsname()
