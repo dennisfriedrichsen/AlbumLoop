@@ -64,3 +64,4 @@ fastlane/test_output
 # SwiftPM / Xcode local state
 .swiftpm/
 DerivedData/
+.DS_Store

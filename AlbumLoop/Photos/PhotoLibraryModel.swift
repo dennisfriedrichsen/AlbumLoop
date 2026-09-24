@@ -7,8 +7,9 @@ struct AlbumSummary: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     /// Still photos (including Live Photos, shown as stills). Videos are excluded.
-    let photoCount: Int
-    let keyAssetID: String?
+    /// Nil while the album is still being counted.
+    var photoCount: Int?
+    var keyAssetID: String?
 }
 
 /// Playback order for an album's photos.
@@ -49,12 +50,29 @@ final class PhotoLibraryModel {
     private(set) var albums: [AlbumSummary] = []
     private(set) var isLoadingAlbums = false
     private(set) var hasLoadedAlbums = false
+    /// Albums whose photo count is known during the current scan.
+    private(set) var countedAlbums = 0
     /// Incremented (debounced) whenever the photo library changes.
     private(set) var libraryRevision = 0
+    /// While true (during a slideshow), library changes don't trigger a full album
+    /// rescan; one runs when the slideshow ends. The slideshow still sees
+    /// `libraryRevision` change so it can re-snapshot its own album.
+    var defersAlbumRescans = false {
+        didSet {
+            if !defersAlbumRescans, rescanPending {
+                rescanPending = false
+                Task { await loadAlbums() }
+            }
+        }
+    }
 
     private let observer = LibraryObserver()
     private var isObserving = false
     private var changeDebounce: Task<Void, Never>?
+    private var rescanPending = false
+
+    /// Albums are counted in batches so the grid fills in progressively.
+    private static let countBatchSize = 12
 
     /// Set once the user has pressed Continue on the explanation screen.
     ///
@@ -105,19 +123,61 @@ final class PhotoLibraryModel {
         }
     }
 
+    /// Lists albums immediately, then fills in photo counts and covers in batches.
+    /// Concurrent calls are coalesced into one follow-up scan.
     func loadAlbums() async {
         guard access == .authorized || access == .limited else { return }
+        guard !isLoadingAlbums else {
+            rescanPending = true
+            return
+        }
         isLoadingAlbums = true
-        defer { isLoadingAlbums = false }
-        let start = ContinuousClock.now
-        let result = await Task.detached(priority: .userInitiated) {
-            AlbumFetcher.fetchAlbums()
+        let clock = ContinuousClock()
+        let start = clock.now
+
+        let listed = await Task.detached(priority: .userInitiated) {
+            AlbumFetcher.fetchAlbumList()
         }.value
-        albums = result
+        // Keep counts from a previous scan so a rescan doesn't blank the grid.
+        let previous = Dictionary(albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        albums = listed.map { album in
+            var album = album
+            album.photoCount = previous[album.id]?.photoCount
+            album.keyAssetID = previous[album.id]?.keyAssetID
+            return album
+        }
+        countedAlbums = 0
         hasLoadedAlbums = true
+        let listedAt = clock.now
         AlbumLoopLog.library.info(
-            "Loaded \(result.count) albums in \(String(describing: ContinuousClock.now - start), privacy: .public)"
+            "Listed \(listed.count) albums in \(String(describing: listedAt - start), privacy: .public)"
         )
+
+        var timing = AlbumFetcher.Timing()
+        let ids = listed.map(\.id)
+        for batchStart in stride(from: 0, to: ids.count, by: Self.countBatchSize) {
+            let batch = Array(ids[batchStart..<min(batchStart + Self.countBatchSize, ids.count)])
+            let (details, batchTiming) = await Task.detached(priority: .userInitiated) {
+                AlbumFetcher.fetchDetails(albumIDs: batch)
+            }.value
+            timing.add(batchTiming)
+            for index in albums.indices {
+                if let detail = details[albums[index].id] {
+                    albums[index].photoCount = detail.count
+                    albums[index].keyAssetID = detail.keyAssetID
+                }
+            }
+            countedAlbums = min(ids.count, batchStart + batch.count)
+        }
+
+        AlbumLoopLog.library.info(
+            "Counted \(ids.count) albums in \(String(describing: clock.now - listedAt), privacy: .public) (counting \(String(describing: timing.counting), privacy: .public), covers \(String(describing: timing.keyAssets), privacy: .public))"
+        )
+        isLoadingAlbums = false
+        if rescanPending && !defersAlbumRescans {
+            rescanPending = false
+            await loadAlbums()
+        }
     }
 
     /// Snapshot of the album's eligible still-photo identifiers, in playback order.
@@ -140,14 +200,19 @@ final class PhotoLibraryModel {
     }
 
     private func libraryDidChange() {
-        // iCloud sync can deliver bursts of changes; coalesce them.
+        // iCloud sync delivers frequent bursts of changes, and a full rescan of a
+        // large library takes tens of seconds on older Apple TVs; coalesce them.
         changeDebounce?.cancel()
         changeDebounce = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled, let self else { return }
             self.libraryRevision += 1
             AlbumLoopLog.library.info("Photo library changed (revision \(self.libraryRevision))")
-            await self.loadAlbums()
+            if self.defersAlbumRescans {
+                self.rescanPending = true
+            } else {
+                await self.loadAlbums()
+            }
         }
     }
 
@@ -182,25 +247,69 @@ private final class LibraryObserver: NSObject, PHPhotoLibraryChangeObserver, PHP
 
 /// Synchronous PhotoKit fetches, run off the main actor.
 enum AlbumFetcher {
-    static func fetchAlbums() -> [AlbumSummary] {
+    struct Detail: Sendable {
+        let count: Int
+        let keyAssetID: String?
+    }
+
+    struct Timing: Sendable {
+        var counting: Duration = .zero
+        var keyAssets: Duration = .zero
+
+        mutating func add(_ other: Timing) {
+            counting += other.counting
+            keyAssets += other.keyAssets
+        }
+    }
+
+    /// Album identifiers and titles only (fast). Counts are filled in separately.
+    static func fetchAlbumList() -> [AlbumSummary] {
         // Ordinary user albums only (includes albums inside folders). Shared
         // albums use a different subtype and are intentionally excluded.
         let collections = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
-        let photosOnly = PHFetchOptions()
-        photosOnly.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
-
         var albums: [AlbumSummary] = []
         collections.enumerateObjects { collection, _, _ in
-            let photos = PHAsset.fetchAssets(in: collection, options: photosOnly)
-            let keyAsset = PHAsset.fetchKeyAssets(in: collection, options: photosOnly)?.firstObject ?? photos.firstObject
             albums.append(AlbumSummary(
                 id: collection.localIdentifier,
                 title: collection.localizedTitle ?? "Untitled Album",
-                photoCount: photos.count,
-                keyAssetID: keyAsset?.localIdentifier
+                photoCount: nil,
+                keyAssetID: nil
             ))
         }
         return albums.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    /// Eligible still-photo count and cover photo for each album.
+    ///
+    /// Measured on an Apple TV HD with 157 albums: an unfiltered fetch plus
+    /// `countOfAssets(with: .image)` took ~4 s in total, versus 20–32 s for a fetch
+    /// with a `mediaType` predicate (same counts), and `fetchKeyAssets` took 20–34 s
+    /// versus ~3 s for using the album's first photo as its cover.
+    static func fetchDetails(albumIDs: [String]) -> ([String: Detail], Timing) {
+        let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: albumIDs, options: nil)
+        let clock = ContinuousClock()
+        var timing = Timing()
+        var details: [String: Detail] = [:]
+        collections.enumerateObjects { collection, _, _ in
+            let countStart = clock.now
+            let assets = PHAsset.fetchAssets(in: collection, options: nil)
+            let count = assets.countOfAssets(with: .image)
+            let coverStart = clock.now
+            timing.counting += coverStart - countStart
+            var cover: String?
+            if count > 0 {
+                // First still photo in album order (usually the very first item).
+                assets.enumerateObjects { asset, _, stop in
+                    if asset.mediaType == .image {
+                        cover = asset.localIdentifier
+                        stop.pointee = true
+                    }
+                }
+            }
+            timing.keyAssets += clock.now - coverStart
+            details[collection.localIdentifier] = Detail(count: count, keyAssetID: cover)
+        }
+        return (details, timing)
     }
 
     static func assetIDs(albumID: String, order: AlbumOrder) -> [AssetID]? {

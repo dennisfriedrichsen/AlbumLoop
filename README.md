@@ -138,7 +138,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 ## Using AlbumLoop
 
-- **Albums screen:** each card shows the album name, cover, and number of eligible still photos. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
+- **Albums screen:** each card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
 - **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), the "Photo 12 of 600" counter, and the diagnostics overlay. **Test iCloud Loading** checks 12 photos spread across the album and reports which ones are already on the Apple TV and how long the others take to download.
 - **During a slideshow (Siri Remote):**
 
@@ -273,7 +273,8 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
 | App launches and plays the demo slideshow; system Photos prompt shows the usage text | tvOS 26.5 Simulator | ✅ Seen in screenshots |
 | Siri Remote input (left/right, Play/Pause, click, Back) | — | ⚠️ **Not yet exercised.** Needs a person with a remote, in the Simulator or on the device |
-| Album enumeration and counts against a real iCloud library | Physical Apple TV | ❌ **Not verified** |
+| Album enumeration against a real iCloud library | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 157 albums listed in 0.4 s; counts and covers filled in within 9 s |
+| Album counts match Photos | Physical Apple TV | ❌ **Not yet compared** (checklist 2.2) |
 | Downloading photos that aren't on the device | Physical Apple TV | ❌ **Not verified** |
 | Full cycles, network loss, memory, and screen-saver behaviour | Physical Apple TV | ❌ **Not verified** |
 

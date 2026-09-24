@@ -121,7 +121,7 @@ struct SlideshowView: View {
                         if showDiagnostics {
                             DiagnosticsOverlay(
                                 diagnostics: controller.diagnostics,
-                                eligibleAlbums: library.albums.filter { $0.photoCount > 0 }.count,
+                                eligibleAlbums: library.albums.filter { ($0.photoCount ?? 0) > 0 }.count,
                                 phase: controller.phase,
                                 isNetworkAvailable: isNetworkAvailable
                             )

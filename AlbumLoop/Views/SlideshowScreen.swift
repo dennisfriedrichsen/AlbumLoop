@@ -36,6 +36,7 @@ struct SlideshowScreen: View {
             }
         }
         .task { await prepare() }
+        .onAppear { library.defersAlbumRescans = true }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active: controller?.enterForeground()
@@ -58,6 +59,7 @@ struct SlideshowScreen: View {
             controller?.handleMemoryPressure()
         }
         .onDisappear {
+            library.defersAlbumRescans = false
             controller?.stop()
             network.stop()
             UIApplication.shared.isIdleTimerDisabled = false

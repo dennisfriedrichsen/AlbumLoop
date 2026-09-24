@@ -68,9 +68,11 @@ struct AlbumGridView: View {
     }
 
     private var summary: String {
-        let eligible = library.albums.filter { $0.photoCount > 0 }.count
+        let eligible = library.albums.filter { ($0.photoCount ?? 0) > 0 }.count
         var text = "\(library.albums.count) albums"
-        if eligible != library.albums.count {
+        if library.isLoadingAlbums && library.countedAlbums < library.albums.count {
+            text += " · counting photos (\(library.countedAlbums) of \(library.albums.count) albums)…"
+        } else if eligible != library.albums.count {
             text += " · \(eligible) with photos"
         }
         if library.access == .limited {
@@ -130,10 +132,11 @@ struct AlbumThumbnail: View {
     }
 }
 
-func photoCountText(_ count: Int) -> String {
+func photoCountText(_ count: Int?) -> String {
     switch count {
+    case nil: "Counting photos…"
     case 0: "No photos"
     case 1: "1 photo"
-    default: "\(count.formatted()) photos"
+    case let count?: "\(count.formatted()) photos"
     }
 }
