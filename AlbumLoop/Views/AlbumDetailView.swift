@@ -17,7 +17,7 @@ struct AlbumDetailView: View {
     @FocusState private var playFocused: Bool
 
     private var current: AlbumSummary {
-        library.albums.first { $0.id == album.id } ?? album
+        library.album(id: album.id) ?? album
     }
 
     var body: some View {

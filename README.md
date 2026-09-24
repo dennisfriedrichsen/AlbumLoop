@@ -138,7 +138,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 ## Using AlbumLoop
 
-- **Albums screen:** each card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
+- **Albums screen:** albums are arranged in the same folders as in Photos. Folders and albums appear in the same custom order as in Photos (PhotoKit's unsorted order, which Apple doesn't document as matching Photos, so compare them on the device). A folder card shows how many albums it contains (subfolders included) and opens its own grid. Empty folders, and folders holding only Shared Albums, are hidden. Each album card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
 - **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), Vertical Photos, the "Photo 12 of 600" counter, and the diagnostics overlay.
 - **Vertical Photos** (how photos that don't fill a 16:9 TV are shown):
 
