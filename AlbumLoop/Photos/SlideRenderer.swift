@@ -1,7 +1,17 @@
 import AlbumLoopCore
 import CoreImage
+import Synchronization
 import UIKit
 import Vision
+
+/// Immutable images handed to a serial queue; safe to send across isolation.
+private struct UncheckedImage: @unchecked Sendable {
+    let image: UIImage
+}
+
+private struct UncheckedCGImage: @unchecked Sendable {
+    let image: CGImage
+}
 
 /// How vertical photos (and anything else that doesn't fill a 16:9 screen) are presented.
 enum VerticalPhotoStyle: String, CaseIterable, Identifiable, Sendable {
@@ -114,8 +124,22 @@ enum SlideRenderer {
         }
     }
 
-    @concurrent
+    /// Serial queue for decoding, drawing, and cropping (never the cooperative pool;
+    /// see `BlockingWork`).
+    private static let renderQueue = DispatchQueue(label: "AlbumLoop.SlideRenderer", qos: .userInitiated)
+
     static func render(_ image: UIImage, style: VerticalPhotoStyle, screen: PixelSize) async throws -> LoadedImage {
+        let input = UncheckedImage(image: image)
+        return try await BlockingWork.run(on: renderQueue) {
+            try renderSynchronously(input.image, style: style, screen: screen)
+        }
+    }
+
+    private static func renderSynchronously(
+        _ image: UIImage,
+        style: VerticalPhotoStyle,
+        screen: PixelSize
+    ) throws -> LoadedImage {
         let source = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard source.width >= 1, source.height >= 1 else {
             throw ImageLoadFailure(.decodeFailed, "The photo has no pixels.")
@@ -182,10 +206,38 @@ enum SlideRenderer {
         return try draw(UIImage(cgImage: cropped), size: CGSize(width: width, height: cropHeight))
     }
 
+    /// Vision runs on its own queue and is given `visionTimeout` to answer.
+    private static let visionQueue = DispatchQueue(label: "AlbumLoop.Vision", qos: .userInitiated)
+    private static let visionTimeout: DispatchTimeInterval = .seconds(3)
+    /// Set after a Vision request fails to answer in time. A hung request keeps
+    /// `visionQueue` busy, so later photos skip detection and use the fallback framing.
+    private static let visionDisabled = Mutex(false)
+
     /// Centre of detected faces, else of the most attention-grabbing region;
-    /// normalised with a top-left origin.
+    /// normalised with a top-left origin. Returns nil (fallback framing) if Vision
+    /// fails, finds nothing, or doesn't answer within `visionTimeout`.
     private static func detectFocus(in image: CGImage) -> CGPoint? {
+        guard !visionDisabled.withLock({ $0 }) else { return nil }
         guard let small = try? downscale(image, maxDimension: 512) else { return nil }
+        let result = Mutex<CGPoint?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        let input = UncheckedCGImage(image: small)
+        visionQueue.async {
+            let focus = runVision(on: input.image)
+            result.withLock { $0 = focus }
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + visionTimeout) == .success else {
+            visionDisabled.withLock { $0 = true }
+            AlbumLoopLog.loading.error(
+                "Vision didn't answer within 3 s; face/subject detection is off until the app restarts"
+            )
+            return nil
+        }
+        return result.withLock { $0 }
+    }
+
+    private static func runVision(on small: CGImage) -> CGPoint? {
         let handler = VNImageRequestHandler(cgImage: small)
         let faces = VNDetectFaceRectanglesRequest()
         let saliency = VNGenerateAttentionBasedSaliencyImageRequest()

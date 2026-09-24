@@ -194,9 +194,9 @@ final class PhotoLibraryModel {
         let clock = ContinuousClock()
         let start = clock.now
 
-        let listing = await Task.detached(priority: .userInitiated) {
+        let listing = await BlockingWork.run {
             AlbumFetcher.fetchAlbumList()
-        }.value
+        }
         let listed = listing.albums
         // Forget key photos of albums that no longer exist.
         let listedIDs = Set(listed.map(\.id))
@@ -229,9 +229,9 @@ final class PhotoLibraryModel {
             let batch = Array(ids[batchStart..<min(batchStart + Self.countBatchSize, ids.count)])
             // Albums with a saved key photo don't need a stand-in cover.
             let needsCover = Set(batch.filter { keyPhotos[$0] == nil })
-            let (details, batchTiming) = await Task.detached(priority: .userInitiated) {
+            let (details, batchTiming) = await BlockingWork.run {
                 AlbumFetcher.fetchDetails(albumIDs: batch, coverFor: needsCover)
-            }.value
+            }
             timing.add(batchTiming)
             // Assign once per batch so observers (and the index) update once.
             var updated = albums
@@ -278,9 +278,9 @@ final class PhotoLibraryModel {
                     return
                 }
                 let batch = Array(albumIDs[batchStart..<min(batchStart + Self.keyPhotoBatchSize, albumIDs.count)])
-                let results = await Task.detached(priority: .utility) {
+                let results = await BlockingWork.run(qos: .utility) {
                     AlbumFetcher.fetchKeyPhotos(albumIDs: batch)
-                }.value
+                }
                 guard !Task.isCancelled else { return }
                 changed += self.apply(keyPhotos: results)
             }
@@ -336,9 +336,9 @@ final class PhotoLibraryModel {
     /// Snapshot of the album's eligible still photos, in playback order.
     /// Returns nil if the album no longer exists.
     func snapshot(forAlbum albumID: String, order: AlbumOrder) async -> AlbumSnapshot? {
-        await Task.detached(priority: .userInitiated) {
+        await BlockingWork.run {
             AlbumFetcher.snapshot(albumID: albumID, order: order)
-        }.value
+        }
     }
 
     func assetIDs(forAlbum albumID: String, order: AlbumOrder) async -> [AssetID]? {

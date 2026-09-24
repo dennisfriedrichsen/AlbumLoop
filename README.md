@@ -6,7 +6,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
-> **Status:** the playback logic is covered by 43 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
+> **Status:** the playback logic is covered by 45 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 
 ---
 
@@ -215,6 +215,14 @@ Every input (slide timer, image completion, remote press, network change) arrive
 - **Eviction and cancellation:** anything outside the window is evicted and its request cancelled on every move, on album change, and when leaving playback. Backgrounding cancels prefetches; a memory warning drops everything except the current and on-screen images and shrinks the window.
 - **No persistence:** the app writes no image data to disk. PhotoKit's own caches are system-managed and purgeable; the app never assumes they hold anything, and it doesn't use preheating (`PHCachingImageManager`) as a signal that anything has downloaded.
 
+### Threading rule: no blocking work on Swift's cooperative pool
+
+Swift concurrency runs `async` code on a thread pool with one thread per CPU core — **two on an Apple TV HD**. On 2026‑09‑24 a slideshow froze on an Apple TV HD because two Vision subject-detection calls (Smart Crop) hung and occupied both threads; timers and the download watchdog, which woke up through that pool, never fired again. The rules since then:
+
+- Synchronous PhotoKit fetches, image decoding/drawing, and Vision run on dedicated dispatch queues (`BlockingWork`, `SlideRenderer`), never directly in `async` code.
+- Vision gets 3 seconds per photo. If it doesn't answer, that photo uses the fallback framing, detection is switched off for the rest of the session, and the event is logged.
+- Slide timers and the stall watchdog use the main dispatch queue (`ContinuousScheduler`), not `Task.sleep`, so they keep working even if the pool is starved. `SchedulerTests` blocks every pool thread and checks that a timer still fires on time; the old `Task.sleep` version fails it.
+
 ### PhotoKit callback handling (`PhotoKitRequest`)
 
 - Degraded previews are ignored; only the final result completes a load.
@@ -269,7 +277,7 @@ xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDat
 
 ## Tests
 
-`AlbumLoopCore/Tests` — 43 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
+`AlbumLoopCore/Tests` — 45 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
 
 | Requirement | Tests |
 |---|---|
@@ -283,6 +291,7 @@ xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDat
 | Stale callbacks | `staleCallbackFromPreviousSession` (including a photo shared by both albums), `staleCallbackAfterNavigation`, `staleAfterReset` |
 | Buffer bounds | `concurrencyBounded`, `byteBudget`, `neededPreemptsPrefetch`, `eviction`, `memoryPressure` |
 | Lifecycle, album edits, loop off | `backgroundLifecycle`, `stopCancels`, `albumEditDeferred`, `finishesWithoutLoop` |
+| Timers under thread-pool starvation | `timersSurvivePoolStarvation`, `cancellation` |
 | Side-by-side pairs and pan timing | `greedyPairs`, `stableBackNavigation`, `pairedShuffleIsPermutation`, `windowsAroundPair`, `pairWaitsForBoth`, `skipHalfOfPair`, `slideElapsed` |
 
 The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryModel`) has no automated tests: the simulator has no iCloud library to test it against. It is covered by the device checklist.
@@ -293,8 +302,8 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 
 | Check | Where | Result |
 |---|---|---|
-| Core logic tests (43) | macOS, `swift test` | ✅ Pass (repeated runs) |
-| Core logic tests (43) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
+| Core logic tests (45) | macOS, `swift test` | ✅ Pass (repeated runs) |
+| Core logic tests (45) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
 | App compiles, Swift 6 language mode | tvOS Simulator SDK and **device** SDK (unsigned) | ✅ Builds with no Swift warnings |
 | Welcome screen and empty-library state | tvOS Simulator (Photos permission granted with `simctl`) | ✅ Rendered |
 | Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
@@ -308,6 +317,7 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Slow Pan smoothness | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ Smooth (reported by owner) |
 | Vertical styles on the device: Vision framing, memory | Physical Apple TV | ❌ **Not verified** (checklist section 12) |
 | On-device log file written and copied off with `devicectl` | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ |
+| Freeze during Smart Crop playback (both pool threads stuck in Vision) | Apple TV HD, diagnosed from the log file and a live backtrace | ✅ Cause found and fixed; ❌ fix **not yet confirmed** by a long Smart Crop run on the device |
 | Downloading photos that aren't on the device | Apple TV HD (AppleTV5,3), tvOS 26.6, **Test iCloud Loading** | ✅ 12 sampled: 1 on device, 11 not on device; 11/11 downloaded at screen size (median 0.8 s, slowest 2.0 s). This is a 12-photo sample, not a full cycle |
 | Full cycles, network loss, memory, and screen-saver behaviour | Physical Apple TV | ❌ **Not verified** |
 

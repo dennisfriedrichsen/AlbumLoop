@@ -20,7 +20,11 @@ final class PhotoKitImageProvider: ImageProviding {
         targetPixelSize: PixelSize,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> LoadedImage {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id.rawValue], options: nil).firstObject else {
+        let identifier = id.rawValue
+        let fetched = await BlockingWork.run {
+            UncheckedAsset(asset: PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil).firstObject)
+        }
+        guard let asset = fetched.asset else {
             throw ImageLoadFailure(.notFound, "This photo is no longer in the library.")
         }
         guard asset.mediaType == .image else {
@@ -87,4 +91,9 @@ final class PhotoKitImageProvider: ImageProviding {
         }
         return ImageLoadFailure(.other, detail)
     }
+}
+
+/// PHAsset is an immutable snapshot of metadata; safe to hand across threads.
+private struct UncheckedAsset: @unchecked Sendable {
+    let asset: PHAsset?
 }
