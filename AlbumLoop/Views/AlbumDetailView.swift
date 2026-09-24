@@ -39,7 +39,11 @@ struct AlbumDetailView: View {
                 .disabled(current.photoCount == 0)
                 .focused($playFocused)
             }
-            .frame(width: 720)
+            // Full-height focus section: pressing left from any settings row lands
+            // on Play, not just from rows level with the button.
+            .frame(width: 720, alignment: .top)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .focusSection()
 
             Form {
                 Section("Playback") {
