@@ -40,14 +40,29 @@ enum DisplayMetrics {
         return PixelSize(width: Int(max(long, 1920)), height: Int(max(short, 1080)))
     }
 
-    /// Buffer sizing: memory for current + on-screen + 3 ahead + 2 behind images at screen size.
+    /// Buffer sizing per presentation style. The byte budget covers the images
+    /// wanted at once (needed + on screen + ahead + behind) at their largest size.
     @MainActor
-    static func bufferConfiguration(for size: PixelSize) -> ImageBuffer.Configuration {
+    static func bufferConfiguration(for size: PixelSize, style: VerticalPhotoStyle) -> ImageBuffer.Configuration {
         var configuration = ImageBuffer.Configuration()
-        configuration.prefetchAhead = 3
-        configuration.keepBehind = 2
         configuration.maxConcurrentLoads = 2
-        configuration.maxDecodedBytes = size.decodedByteEstimate * 7
+        switch style {
+        case .slowPan:
+            // Pan images are up to twice screen width tall, so hold fewer.
+            configuration.prefetchAhead = 2
+            configuration.keepBehind = 1
+        case .sideBySide:
+            // Two photos per slide: look further ahead in photos.
+            configuration.prefetchAhead = 4
+            configuration.keepBehind = 2
+        case .blurredBackground, .smartCrop, .blackBars:
+            configuration.prefetchAhead = 3
+            configuration.keepBehind = 2
+        }
+        let perImage = SlideRenderer.estimatedImageBytes(style: style, screen: size)
+        configuration.estimatedImageBytes = perImage
+        let wanted = configuration.prefetchAhead + configuration.keepBehind + (style == .sideBySide ? 4 : 2)
+        configuration.maxDecodedBytes = perImage * wanted
         return configuration
     }
 }
@@ -60,6 +75,7 @@ enum SettingsKey {
     static let showCounter = "showCounter"
     static let albumOrder = "albumOrder"
     static let showDiagnostics = "showDiagnostics"
+    static let verticalStyle = "verticalStyle"
 }
 
 enum SettingsDefault {

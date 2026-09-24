@@ -96,7 +96,7 @@ struct PlaybackSequenceTests {
     func rebuild() {
         var sequence = PlaybackSequence(items: ids(3), order: .sequential, loops: true, seed: 1)
         _ = sequence.advance(); _ = sequence.advance(); _ = sequence.advance()
-        let rebuilt = sequence.rebuilt(with: ids(5, prefix: "b"), avoidingFirst: nil)
+        let rebuilt = sequence.rebuilt(with: ids(5, prefix: "b"), pairable: [], avoidingFirst: nil)
         #expect(rebuilt.cycle == 2)
         #expect(rebuilt.count == 5)
         #expect(rebuilt.position == 0)

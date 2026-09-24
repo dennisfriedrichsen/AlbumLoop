@@ -77,7 +77,7 @@ Settings: Shuffle on, Loop on, 3‑second slides.
 - [ ] **7.3** Play/Pause pauses: a "Paused" badge appears, nothing advances for 60 s, and prefetch continues (diagnostics Buffered rises). Play/Pause again resumes with the remaining time.
 - [ ] **7.4** Click → controls appear with visible focus. Left/right move focus between buttons. Back hides them; Back again exits.
 - [ ] **7.5** The Loop and Counter buttons in the controls take effect immediately.
-- [ ] **7.6** Photos of every shape (portrait, landscape, panorama) show whole, letterboxed, with nothing cropped.
+- [ ] **7.6** With Black Bars or Blurred Background, photos of every shape (portrait, landscape, panorama) show whole, with nothing cropped.
 
 ## 8. Network loss and recovery
 
@@ -105,6 +105,18 @@ Settings: Shuffle on, Loop on, 3‑second slides.
 
 - [ ] **11.1** Check Apple TV free storage after the tests and compare it with 0.2. Any growth should be system cache, which tvOS can purge; the app keeps no copies. Record: ______
 
+## 12. Vertical photos
+
+Use an album with many vertical photos. Turn on the diagnostics overlay. For each style, watch at least 20 slides.
+
+- [ ] **12.1** The Vertical Photos setting shows "(best for older Apple TVs)" next to Blurred Background, and on an Apple TV HD or 4K (1st gen) it is the default.
+- [ ] **12.2** **Blurred Background:** the side bars show a soft, darkened version of the photo; slide changes crossfade without a black flash.
+- [ ] **12.3** **Slow Pan:** vertical photos fill the screen and move smoothly (no stutter); portraits end with the face in view. Play/Pause freezes the pan. Note memory versus budget and whether it ever stops to load: ______
+- [ ] **12.4** **Smart Crop:** faces are inside the frame (not cut off at the top). Count bad crops out of 20: ______
+- [ ] **12.5** **Side by Side:** adjacent vertical photos appear as pairs with "Photos N–N+1 of M"; Left/Right move by whole slides and return to the same pairs. A pair never contains a landscape photo (if it does, PhotoKit's stored dimensions don't match the displayed orientation; note it).
+- [ ] **12.6** **Black Bars:** unchanged from before.
+- [ ] **12.7** Which style do you prefer on this Apple TV? ______
+
 ## Sign-off
 
 | Area | Result | Notes |
@@ -117,3 +129,4 @@ Settings: Shuffle on, Loop on, 3‑second slides.
 | Network (8) | | |
 | Lifecycle (9) | | |
 | Album edits (10) | | |
+| Vertical photos (12) | | |

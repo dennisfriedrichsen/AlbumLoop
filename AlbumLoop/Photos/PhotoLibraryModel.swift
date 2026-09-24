@@ -12,6 +12,14 @@ struct AlbumSummary: Identifiable, Hashable, Sendable {
     var keyAssetID: String?
 }
 
+/// Snapshot of an album's eligible photos taken when a slideshow starts.
+struct AlbumSnapshot: Sendable {
+    /// Still photos in playback order.
+    let ids: [AssetID]
+    /// Photos whose stored dimensions are vertical, used for side-by-side pairing.
+    let verticalIDs: Set<AssetID>
+}
+
 /// Playback order for an album's photos.
 enum AlbumOrder: String, CaseIterable, Identifiable, Sendable {
     /// The order PhotoKit returns for the album with no sort descriptors,
@@ -180,12 +188,16 @@ final class PhotoLibraryModel {
         }
     }
 
-    /// Snapshot of the album's eligible still-photo identifiers, in playback order.
+    /// Snapshot of the album's eligible still photos, in playback order.
     /// Returns nil if the album no longer exists.
-    func assetIDs(forAlbum albumID: String, order: AlbumOrder) async -> [AssetID]? {
+    func snapshot(forAlbum albumID: String, order: AlbumOrder) async -> AlbumSnapshot? {
         await Task.detached(priority: .userInitiated) {
-            AlbumFetcher.assetIDs(albumID: albumID, order: order)
+            AlbumFetcher.snapshot(albumID: albumID, order: order)
         }.value
+    }
+
+    func assetIDs(forAlbum albumID: String, order: AlbumOrder) async -> [AssetID]? {
+        await snapshot(forAlbum: albumID, order: order)?.ids
     }
 
     private func startObserving() {
@@ -312,7 +324,7 @@ enum AlbumFetcher {
         return (details, timing)
     }
 
-    static func assetIDs(albumID: String, order: AlbumOrder) -> [AssetID]? {
+    static func snapshot(albumID: String, order: AlbumOrder) -> AlbumSnapshot? {
         guard let collection = PHAssetCollection.fetchAssetCollections(
             withLocalIdentifiers: [albumID],
             options: nil
@@ -332,12 +344,17 @@ enum AlbumFetcher {
         }
         let assets = PHAsset.fetchAssets(in: collection, options: options)
         var ids: [AssetID] = []
+        var vertical: Set<AssetID> = []
         ids.reserveCapacity(assets.count)
         assets.enumerateObjects { asset, _, _ in
-            if asset.mediaType == .image {
-                ids.append(AssetID(asset.localIdentifier))
+            guard asset.mediaType == .image else { return }
+            let id = AssetID(asset.localIdentifier)
+            ids.append(id)
+            // Metadata only; nothing is downloaded.
+            if SlideRenderer.isVertical(width: asset.pixelWidth, height: asset.pixelHeight) {
+                vertical.insert(id)
             }
         }
-        return ids
+        return AlbumSnapshot(ids: ids, verticalIDs: vertical)
     }
 }

@@ -6,7 +6,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
-> **Status:** the playback logic is covered by 34 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works and photos stored only in iCloud download through public PhotoKit (11 of 11 sampled). **Full playback cycles, network loss, and long runs have not been verified on the device yet.** See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
+> **Status:** the playback logic is covered by 41 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 
 ---
 
@@ -139,7 +139,18 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 ## Using AlbumLoop
 
 - **Albums screen:** each card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
-- **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), the "Photo 12 of 600" counter, and the diagnostics overlay. **Test iCloud Loading** checks 12 photos spread across the album and reports which ones are already on the Apple TV and how long the others take to download.
+- **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), Vertical Photos, the "Photo 12 of 600" counter, and the diagnostics overlay.
+- **Vertical Photos** (how photos that don't fill a 16:9 TV are shown):
+
+| Style | What you see | Cost |
+|---|---|---|
+| **Blurred Background** *(best for older Apple TVs; default on Apple TV HD and 4K 1st gen)* | Whole photo, with a blurred, darkened copy filling the sides | Lowest: one extra 64‑pixel image per photo |
+| **Slow Pan** *(default on Apple TV 4K 2nd gen and later)* | Vertical photos fill the width and slowly pan, ending on the face or subject found by Vision (or the upper third if none is found). The pan pauses with Play/Pause and is turned off by Reduce Motion | Highest: pan images are up to twice as tall as they are wide (~30 MB each at 1080p), so fewer are buffered (2 ahead, 1 behind), plus Vision detection |
+| **Smart Crop** | Vertical photos fill the screen, cropped around the face or subject (about two thirds of the height is cut) | Moderate: Vision detection; the stored image is screen-sized |
+| **Side by Side** | Two vertical photos that are next to each other in the playback order share a slide ("Photos 127–128 of 600") | Two downloads per slide; buffers 4 photos ahead |
+| **Black Bars** | Whole photo, black bars | Lowest |
+
+  Photos narrower than 0.9:1 (width:height) count as vertical. Landscape photos are shown whole in every style (with the blurred background unless Black Bars is chosen). **Test iCloud Loading** checks 12 photos spread across the album and reports which ones are already on the Apple TV and how long the others take to download.
 - **During a slideshow (Siri Remote):**
 
 | Input | Action |
@@ -224,6 +235,13 @@ Every input (slide timer, image completion, remote press, network change) arrive
 | Every photo in a cycle skipped or missing | Playback stops with an explanation instead of looping. |
 | A load fails | Never resets to the first photo and never triggers an early loop. Position only moves through the sequence. |
 
+### Vertical photos and slides
+
+- **Slides:** `PlaybackSequence` plays *slides*. In Side by Side mode, adjacent vertical photos (from PhotoKit's stored dimensions, available without downloading) are paired greedily per cycle, so Previous always returns the same pairs. Shuffle permutes photos first, then pairs; every photo still appears exactly once per cycle. A pair is shown only when both photos are ready. If one fails after retries, the slideshow stalls; **Skip Photo** records that photo as skipped and shows the other one alone.
+- **Rendering:** `SlideRenderer` prepares each photo for the chosen style off the main thread: fit to screen, render at screen width for panning (max 2560 px wide), or crop to the screen's shape around the detected subject. Subject detection uses Vision face rectangles, falling back to attention-based saliency, on a 512‑pixel copy. The blurred background is a 64‑pixel Core Image blur.
+- **Crossfade:** the next slide fades in over the current one, which stays fully visible underneath until the fade completes, so slides never flash black.
+- **Simulator note:** Vision's saliency request fails in the simulator ("Failed to create espresso context"), so there panning and cropping fall back to the upper-third framing. Detection must be checked on the Apple TV.
+
 ### Ordering
 
 - **Album Order (default):** `PHAsset.fetchAssets(in: album, options: nil)` with no sort descriptors and no predicate; videos are filtered out afterwards so the order isn't disturbed. In practice PhotoKit returns a user album's own order, but **Apple does not document that guarantee**, so check it on your Apple TV (checklist step 4).
@@ -243,7 +261,7 @@ Every input (slide timer, image completion, remote press, network change) arrive
 
 ## Tests
 
-`AlbumLoopCore/Tests` — 34 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
+`AlbumLoopCore/Tests` — 41 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
 
 | Requirement | Tests |
 |---|---|
@@ -257,6 +275,7 @@ Every input (slide timer, image completion, remote press, network change) arrive
 | Stale callbacks | `staleCallbackFromPreviousSession` (including a photo shared by both albums), `staleCallbackAfterNavigation`, `staleAfterReset` |
 | Buffer bounds | `concurrencyBounded`, `byteBudget`, `neededPreemptsPrefetch`, `eviction`, `memoryPressure` |
 | Lifecycle, album edits, loop off | `backgroundLifecycle`, `stopCancels`, `albumEditDeferred`, `finishesWithoutLoop` |
+| Side-by-side pairs and pan timing | `greedyPairs`, `stableBackNavigation`, `pairedShuffleIsPermutation`, `windowsAroundPair`, `pairWaitsForBoth`, `skipHalfOfPair`, `slideElapsed` |
 
 The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryModel`) has no automated tests: the simulator has no iCloud library to test it against. It is covered by the device checklist.
 
@@ -266,8 +285,8 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 
 | Check | Where | Result |
 |---|---|---|
-| Core logic tests (34) | macOS, `swift test` | ✅ Pass (5 consecutive runs) |
-| Core logic tests (34) | tvOS 27.0 and tvOS 26.5 Simulators, `xcodebuild test` | ✅ Pass |
+| Core logic tests (41) | macOS, `swift test` | ✅ Pass (repeated runs) |
+| Core logic tests (41) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
 | App compiles, Swift 6 language mode | tvOS Simulator SDK and **device** SDK (unsigned) | ✅ Builds with no Swift warnings |
 | Welcome screen and empty-library state | tvOS Simulator (Photos permission granted with `simctl`) | ✅ Rendered |
 | Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
@@ -275,6 +294,9 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Siri Remote input (left/right, Play/Pause, click, Back) | — | ⚠️ **Not yet exercised.** Needs a person with a remote, in the Simulator or on the device |
 | Album enumeration against a real iCloud library | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 157 albums listed in 0.4 s; counts and covers filled in within 9 s |
 | Album counts match Photos | Physical Apple TV | ❌ **Not yet compared** (checklist 2.2) |
+| Full sequential playback of a large album | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 392-photo album: every photo downloaded and displayed |
+| Vertical styles: layout, pan motion, pairs, crossfade with no black frames | tvOS 26.5 Simulator, `-demoSlideshow -verticalStyle …`, screenshots and frame analysis of screen recordings | ✅ All five styles render; no black or jumping frames at slide changes |
+| Vertical styles on the device (Vision detection, smoothness and memory on Apple TV HD) | Physical Apple TV | ❌ **Not verified** (checklist section 12) |
 | Downloading photos that aren't on the device | Apple TV HD (AppleTV5,3), tvOS 26.6, **Test iCloud Loading** | ✅ 12 sampled: 1 on device, 11 not on device; 11/11 downloaded at screen size (median 0.8 s, slowest 2.0 s). This is a 12-photo sample, not a full cycle |
 | Full cycles, network loss, memory, and screen-saver behaviour | Physical Apple TV | ❌ **Not verified** |
 
@@ -284,7 +306,8 @@ No claim about iCloud reliability is made from mocks. Run the [physical-device c
 
 ## Limitations (version 1)
 
-- Still photos only. Live Photos are shown as stills; videos are excluded. No music, video, or elaborate transitions (a 0.6 s crossfade only).
+- Still photos only. Live Photos are shown as stills; videos are excluded. No music or video; transitions are a 0.6 s crossfade (plus the optional slow pan).
+- Smart Crop and Slow Pan intentionally don't show every part of a vertical photo at once (Smart Crop never shows the cropped parts). Choose Blurred Background, Side by Side, or Black Bars to always see whole photos.
 - Ordinary user albums only; Shared Albums and smart albums (such as Favorites) are not listed.
 - Album order relies on PhotoKit's undocumented default order for user albums, with date-based orders as the fallback.
 - If a photo can only be downloaded very slowly, the slideshow waits for it (with a visible indicator) rather than skipping ahead; the stall watchdog bounds that wait.

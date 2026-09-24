@@ -8,6 +8,7 @@ import SwiftUI
 struct SlideshowView: View {
     let controller: SlideshowController
     let albumTitle: String
+    let style: VerticalPhotoStyle
     let isNetworkAvailable: Bool
     let onExit: () -> Void
     let onRestart: () -> Void
@@ -16,6 +17,8 @@ struct SlideshowView: View {
     @AppStorage(SettingsKey.showCounter) private var showCounter = true
     @AppStorage(SettingsKey.showDiagnostics) private var showDiagnostics = false
     @State private var controlsVisible = false
+    /// Slides being drawn: normally one; two during a crossfade.
+    @State private var layers: [SlideLayer] = []
     @State private var hideControlsTask: Task<Void, Never>?
     @FocusState private var focus: Focus?
 
@@ -34,7 +37,7 @@ struct SlideshowView: View {
 
     private var slideKey: String {
         guard let slide = controller.displayed else { return "none" }
-        return "\(slide.cycle)-\(slide.position)"
+        return "\(slide.cycle)-\(slide.slideIndex)-\(slide.ids.count)"
     }
 
     var body: some View {
@@ -74,16 +77,18 @@ struct SlideshowView: View {
     private var canvas: some View {
         ZStack {
             Color.black
-            if let slide = controller.displayed, let cgImage = slide.image.cgImage {
-                Image(cgImage, scale: 1, label: Text("Photo \(slide.position + 1) of \(controller.total)"))
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .id(slideKey)
-                    .transition(.opacity)
+            ForEach(layers) { layer in
+                SlideContentView(
+                    slide: layer.slide,
+                    total: controller.total,
+                    style: style,
+                    controller: controller,
+                    isCurrent: layer.id == layers.last?.id
+                )
+                .opacity(layer.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.6), value: slideKey)
+        .onChange(of: slideKey, initial: true) { crossfadeToDisplayedSlide() }
         .ignoresSafeArea()
         .focusable(!hasPanel && !controlsVisible)
         .focused($focus, equals: .canvas)
@@ -97,6 +102,30 @@ struct SlideshowView: View {
             }
         }
         .onTapGesture { revealControls() }
+    }
+
+    /// Fades the new slide in over the old one (which stays fully visible
+    /// underneath), then drops the old one. A plain SwiftUI transition removed
+    /// the old slide immediately, flashing black between slides.
+    private func crossfadeToDisplayedSlide() {
+        guard let slide = controller.displayed else {
+            layers = []
+            return
+        }
+        let key = slideKey
+        guard layers.last?.id != key else { return }
+        guard !layers.isEmpty else {
+            layers = [SlideLayer(id: key, slide: slide, opacity: 1)]
+            return
+        }
+        layers.append(SlideLayer(id: key, slide: slide, opacity: 0))
+        withAnimation(.easeInOut(duration: 0.6)) {
+            if let index = layers.firstIndex(where: { $0.id == key }) {
+                layers[index].opacity = 1
+            }
+        } completion: {
+            layers.removeAll { $0.id != key && layers.last?.id == key }
+        }
     }
 
     // MARK: Status overlays (non-interactive)
@@ -161,7 +190,11 @@ struct SlideshowView: View {
 
     private var counterText: String {
         let position = controller.targetPosition + 1
-        return "Photo \(position.formatted()) of \(controller.total.formatted())"
+        let total = controller.total.formatted()
+        if controller.targetSlideSize > 1 {
+            return "Photos \(position.formatted())–\((position + controller.targetSlideSize - 1).formatted()) of \(total)"
+        }
+        return "Photo \(position.formatted()) of \(total)"
     }
 
     private func loadingText(first: Bool) -> String {
@@ -328,4 +361,10 @@ private extension View {
             .background(.black.opacity(0.55), in: Capsule())
             .foregroundStyle(.white)
     }
+}
+
+private struct SlideLayer: Identifiable {
+    let id: String
+    let slide: DisplayedSlide
+    var opacity: Double
 }

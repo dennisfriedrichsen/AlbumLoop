@@ -10,9 +10,12 @@ struct RootView: View {
         #if DEBUG
         if DemoImageProvider.isEnabled {
             SlideshowScreen(
-                album: AlbumSummary(id: "demo", title: "Demo", photoCount: 60, keyAssetID: nil),
+                album: AlbumSummary(id: "demo", title: "Demo", photoCount: DemoImageProvider.count, keyAssetID: nil),
                 order: .album,
-                settings: SlideshowSettings(slideDuration: .seconds(4))
+                settings: SlideshowSettings(slideDuration: .seconds(6)),
+                style: VerticalPhotoStyle(
+                    rawValue: UserDefaults.standard.string(forKey: SettingsKey.verticalStyle) ?? ""
+                ) ?? .recommended
             )
         } else {
             browser

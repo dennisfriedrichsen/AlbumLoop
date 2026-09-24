@@ -14,13 +14,25 @@ public struct SlideshowSettings: Sendable, Equatable {
     }
 }
 
-/// The slide currently on screen.
-public struct DisplayedSlide: Sendable {
+/// One photo on the displayed slide.
+public struct DisplayedPhoto: Sendable {
     public let id: AssetID
     public let image: LoadedImage
+}
+
+/// The slide currently on screen: one photo, or two when vertical photos are paired.
+public struct DisplayedSlide: Sendable {
+    public let photos: [DisplayedPhoto]
     public let cycle: Int
-    /// 0-based position in the cycle.
+    /// 0-based index of the slide in the cycle.
+    public let slideIndex: Int
+    /// 0-based photo position (in the cycle) of the slide's first photo.
     public let position: Int
+
+    /// The first photo on the slide.
+    public var id: AssetID { photos[0].id }
+    public var image: LoadedImage { photos[0].image }
+    public var ids: [AssetID] { photos.map(\.id) }
 }
 
 /// Drives one slideshow: owns the playback sequence, the image buffer, and the
@@ -35,11 +47,11 @@ public final class SlideshowController {
     public enum Phase: Equatable, Sendable {
         /// No slideshow is running.
         case idle
-        /// Waiting for the target slide's image. Any previous image stays on screen.
+        /// Waiting for the target slide's images. Any previous slide stays on screen.
         case loading
         /// The target slide is on screen.
         case showing
-        /// The target slide failed after automatic retries; the user can retry or skip.
+        /// A photo on the target slide failed after automatic retries; the user can retry or skip.
         case stalled(ImageLoadFailure)
         /// Looping is off and every slide has been visited.
         case finished
@@ -47,18 +59,32 @@ public final class SlideshowController {
         case failed(String)
     }
 
+    /// Why the target slide changed; decides how failures on it are handled.
+    private enum Navigation {
+        /// Not a move (start, retry, image event).
+        case none
+        /// Automatic advance (timer, or passing a removed photo).
+        case automatic
+        case userForward
+        case userBackward
+
+        var isUser: Bool { self == .userForward || self == .userBackward }
+    }
+
     // MARK: Observable state
 
     public private(set) var phase: Phase = .idle
     public private(set) var isPaused = false
     public private(set) var displayed: DisplayedSlide?
-    /// 0-based position of the slide playback is on (which may still be loading).
+    /// 0-based photo position of the slide playback is on (which may still be loading).
     public private(set) var targetPosition = 0
+    /// Number of photos on the target slide (2 for a vertical pair).
+    public private(set) var targetSlideSize = 1
     public private(set) var total = 0
     public private(set) var cycle = 1
     /// Download progress for the target slide while loading, if known.
     public private(set) var targetProgress: Double?
-    /// True while the target slide is between automatic retries.
+    /// True while a photo on the target slide is between automatic retries.
     public private(set) var isRetryingTarget = false
     public private(set) var lastCycleReport: CycleReport?
     /// Short-lived message for the user (cycle summary, album change, network).
@@ -74,6 +100,19 @@ public final class SlideshowController {
         case .loading, .showing: return true
         case .idle, .stalled, .finished, .failed: return false
         }
+    }
+
+    /// How far the on-screen slide is through its display time. Not observable;
+    /// read it from a `TimelineView` to drive motion such as panning. Freezes
+    /// while paused and holds at the full duration while the next slide loads.
+    public var slideElapsed: Duration {
+        if let timerStartedAt {
+            return min(settings.slideDuration, scheduler.now - timerStartedAt)
+        }
+        if let remainingSlideTime {
+            return settings.slideDuration - remainingSlideTime
+        }
+        return phase == .showing ? .zero : settings.slideDuration
     }
 
     // MARK: Private state
@@ -92,12 +131,14 @@ public final class SlideshowController {
     /// Time left on the slide timer when paused.
     private var remainingSlideTime: Duration?
     private var noticeTimer: ScheduledWork?
-    private var pendingSnapshot: [AssetID]?
+    private var pendingSnapshot: (ids: [AssetID], pairable: Set<AssetID>)?
     private var wasPlayingBeforeBackground = false
 
     private var displayedThisCycle: Set<AssetID> = []
     private var skippedThisCycle: [AssetID] = []
     private var removedThisCycle: [AssetID] = []
+    /// Skipped and removed photos, left off their slides for the rest of the cycle.
+    private var excludedThisCycle: Set<AssetID> = []
 
     public init(
         provider: any ImageProviding,
@@ -119,7 +160,10 @@ public final class SlideshowController {
 
     /// Starts a new slideshow from a snapshot of eligible asset identifiers.
     /// Any previous session is cancelled and its late callbacks are ignored.
-    public func start(assetIDs: [AssetID], settings: SlideshowSettings? = nil) {
+    ///
+    /// - Parameter pairable: Photos that may share a slide with an adjacent
+    ///   pairable photo (vertical photos when side-by-side pairing is on).
+    public func start(assetIDs: [AssetID], pairable: Set<AssetID> = [], settings: SlideshowSettings? = nil) {
         stop()
         if let settings { self.settings = settings }
         sessionID += 1
@@ -143,14 +187,15 @@ public final class SlideshowController {
             items: assetIDs,
             order: self.settings.order,
             loops: self.settings.loops,
-            seed: seedSource()
+            seed: seedSource(),
+            pairable: pairable
         )
         total = assetIDs.count
         phase = .loading
         AlbumLoopLog.playback.info(
-            "Session \(session) started: \(assetIDs.count) photos, order \(self.settings.order.rawValue, privacy: .public)"
+            "Session \(session) started: \(assetIDs.count) photos, \(self.sequence?.slideCount ?? 0) slides, order \(self.settings.order.rawValue, privacy: .public)"
         )
-        targetChanged(byNavigation: false)
+        targetChanged(.none)
     }
 
     /// Ends the slideshow, cancelling timers and every outstanding request.
@@ -167,6 +212,7 @@ public final class SlideshowController {
         phase = .idle
         isPaused = false
         targetPosition = 0
+        targetSlideSize = 1
         total = 0
         cycle = 1
         targetProgress = nil
@@ -213,7 +259,7 @@ public final class SlideshowController {
         case .stalled:
             skipCurrent()
         case .loading, .showing:
-            advance(byUser: true)
+            advance(navigation: .userForward)
         case .idle, .finished, .failed:
             break
         }
@@ -221,41 +267,47 @@ public final class SlideshowController {
 
     /// Moves back one slide within the current cycle.
     public func previous() {
-        guard var sequence else { return }
+        guard sequence != nil else { return }
         switch phase {
         case .loading, .showing, .stalled, .finished:
-            guard sequence.retreat() else {
-                showNotice("Start of this cycle")
-                return
-            }
-            self.sequence = sequence
-            cancelSlideTimer()
-            phase = .loading
-            targetChanged(byNavigation: true)
+            retreat()
         case .idle, .failed:
             break
         }
     }
 
-    /// Tries the stalled slide again with a fresh set of attempts.
+    /// Tries the stalled photos again with a fresh set of attempts.
     public func retryCurrent() {
         guard let sequence, let buffer else { return }
         if case .stalled = phase {
             phase = .loading
         }
-        buffer.retry(sequence.currentID)
-        targetChanged(byNavigation: false)
+        for id in sequence.currentIDs {
+            buffer.retry(id)
+        }
+        targetChanged(.none)
     }
 
-    /// Explicitly skips the slide that could not be loaded and records it.
+    /// Explicitly skips the photos on this slide that could not be loaded and
+    /// records them. A paired photo that did load is still shown.
     public func skipCurrent() {
-        guard let sequence, case .stalled = phase else { return }
-        let id = sequence.currentID
-        if !skippedThisCycle.contains(id) {
-            skippedThisCycle.append(id)
+        guard let sequence, let buffer, case .stalled = phase else { return }
+        let failedIDs = sequence.currentIDs.filter { id in
+            if case .failed = buffer.status(for: id) { true } else { false }
         }
-        AlbumLoopLog.playback.notice("User skipped unavailable photo \(id.logToken, privacy: .public)")
-        advance(byUser: true)
+        for id in failedIDs {
+            if !skippedThisCycle.contains(id) {
+                skippedThisCycle.append(id)
+            }
+            excludedThisCycle.insert(id)
+            AlbumLoopLog.playback.notice("User skipped unavailable photo \(id.logToken, privacy: .public)")
+        }
+        if activeIDs(of: sequence).isEmpty {
+            advance(navigation: .userForward)
+        } else {
+            phase = .loading
+            targetChanged(.none)
+        }
     }
 
     /// Changes the loop setting for the rest of this session.
@@ -269,7 +321,8 @@ public final class SlideshowController {
     /// slideshow finished (loop off).
     public func playAgain() {
         guard let sequence, phase == .finished else { return }
-        start(assetIDs: pendingSnapshot ?? sequence.items)
+        let snapshot = pendingSnapshot ?? (sequence.items, sequence.pairable)
+        start(assetIDs: snapshot.ids, pairable: snapshot.pairable)
     }
 
     // MARK: Environment events
@@ -284,7 +337,7 @@ public final class SlideshowController {
             buffer.retryAllFailed()
             if case .stalled = phase {
                 phase = .loading
-                targetChanged(byNavigation: false)
+                targetChanged(.none)
             }
         } else {
             showNotice("Network unavailable — photos not already loaded will wait")
@@ -298,11 +351,10 @@ public final class SlideshowController {
 
     /// Call when the app leaves the foreground: pauses and cancels prefetching.
     public func enterBackground() {
-        guard sequence != nil else { return }
+        guard let sequence else { return }
         wasPlayingBeforeBackground = !isPaused
         pause()
-        let protectedIDs = [sequence?.currentID, displayed?.id].compactMap { $0 }
-        buffer?.setWindow(needed: protectedIDs.first, ahead: [], behind: [], onScreen: displayed?.id)
+        buffer?.setWindow(needed: sequence.currentIDs, ahead: [], behind: [], onScreen: displayed?.ids ?? [])
         publishDiagnostics()
     }
 
@@ -317,9 +369,9 @@ public final class SlideshowController {
 
     /// Supplies a fresh snapshot after the album changed in the library.
     /// The running cycle is never rebuilt; the new snapshot applies from the next cycle.
-    public func albumContentsChanged(_ newIDs: [AssetID]) {
+    public func albumContentsChanged(_ newIDs: [AssetID], pairable: Set<AssetID> = []) {
         guard let sequence, newIDs != sequence.items else { return }
-        pendingSnapshot = newIDs
+        pendingSnapshot = (newIDs, pairable)
         let delta = newIDs.count - sequence.items.count
         let change = delta == 0 ? "changed" : (delta > 0 ? "gained \(delta)" : "lost \(-delta)")
         showNotice("Album \(change) photo\(abs(delta) == 1 ? "" : "s") — updates apply after this cycle")
@@ -328,7 +380,7 @@ public final class SlideshowController {
 
     // MARK: Core state machine
 
-    private func advance(byUser: Bool) {
+    private func advance(navigation: Navigation) {
         guard var sequence else { return }
         cancelSlideTimer()
         let step = sequence.advance()
@@ -366,70 +418,138 @@ public final class SlideshowController {
             return
         }
         phase = .loading
-        targetChanged(byNavigation: byUser)
+        targetChanged(navigation)
     }
 
-    private func applySnapshot(_ ids: [AssetID]) {
+    private func retreat() {
+        guard var sequence else { return }
+        guard sequence.retreat() else {
+            showNotice("Start of this cycle")
+            return
+        }
+        self.sequence = sequence
+        cancelSlideTimer()
+        phase = .loading
+        targetChanged(.userBackward)
+    }
+
+    private func applySnapshot(_ snapshot: (ids: [AssetID], pairable: Set<AssetID>)) {
         guard let sequence else { return }
-        guard !ids.isEmpty else {
+        guard !snapshot.ids.isEmpty else {
             fail("This album no longer contains any photos.")
             return
         }
         let old = sequence.items.count
-        self.sequence = sequence.rebuilt(with: ids, avoidingFirst: displayed?.id)
-        total = ids.count
-        showNotice("Album updated: \(old) → \(ids.count) photos")
+        self.sequence = sequence.rebuilt(with: snapshot.ids, pairable: snapshot.pairable, avoidingFirst: displayed?.id)
+        total = snapshot.ids.count
+        showNotice("Album updated: \(old) → \(snapshot.ids.count) photos")
+    }
+
+    /// Photos on the current slide that haven't been skipped or removed this cycle.
+    private func activeIDs(of sequence: PlaybackSequence) -> [AssetID] {
+        sequence.currentIDs.filter { !excludedThisCycle.contains($0) }
     }
 
     /// Re-evaluates the slide playback is on after any change of position,
     /// buffer state, or retry.
-    private func targetChanged(byNavigation: Bool) {
+    private func targetChanged(_ navigation: Navigation) {
         guard let sequence, let buffer else { return }
         targetPosition = sequence.position
+        targetSlideSize = sequence.currentIDs.count
         cycle = sequence.cycle
         refreshWindow()
 
-        let id = sequence.currentID
-        if let displayed, displayed.cycle == sequence.cycle, displayed.position == sequence.position,
-           displayed.id == id {
+        var ids = activeIDs(of: sequence)
+        if ids.isEmpty {
+            // Every photo on this slide was skipped or removed earlier this cycle.
+            let skipped = sequence.currentIDs.filter { skippedThisCycle.contains($0) }
+            if navigation.isUser, !skipped.isEmpty {
+                // The user came back to it on purpose: try the skipped photos again.
+                for id in skipped {
+                    excludedThisCycle.remove(id)
+                    buffer.retry(id)
+                }
+                ids = skipped
+            } else {
+                passOver(navigation)
+                return
+            }
+        }
+
+        if let displayed, displayed.cycle == sequence.cycle, displayed.slideIndex == sequence.slideIndex,
+           displayed.ids == ids {
             phase = .showing
             startSlideTimerIfNeeded()
             publishDiagnostics()
             return
         }
 
-        switch buffer.status(for: id) {
-        case .ready:
-            show(id)
-        case .failed(let failure):
-            if failure.kind == .notFound || failure.kind == .unsupported {
-                // The photo was deleted or changed type after the snapshot. Record and move on.
+        var failure: ImageLoadFailure?
+        var allReady = true
+        var removedAny = false
+        for id in ids {
+            switch buffer.status(for: id) {
+            case .ready:
+                continue
+            case .failed(let error) where error.kind == .notFound || error.kind == .unsupported:
+                // Deleted or changed type after the snapshot. Record and leave it off the slide.
                 if !removedThisCycle.contains(id) { removedThisCycle.append(id) }
+                excludedThisCycle.insert(id)
+                removedAny = true
                 AlbumLoopLog.playback.notice("Photo \(id.logToken, privacy: .public) no longer available; skipping")
-                advance(byUser: false)
-                return
+            case .failed(let error):
+                allReady = false
+                if navigation.isUser {
+                    // Returning to a photo that failed earlier: try it again rather
+                    // than immediately showing an error.
+                    buffer.retry(id)
+                } else {
+                    failure = failure ?? error
+                }
+            case .absent, .queued, .loading, .waitingToRetry:
+                allReady = false
             }
-            if byNavigation {
-                // Returning to a photo that failed earlier: try it again rather than
-                // immediately showing an error.
-                buffer.retry(id)
-                phase = .loading
-                updateTargetLoadingState()
-            } else {
-                phase = .stalled(failure)
-            }
-        case .absent, .queued, .loading, .waitingToRetry:
+        }
+
+        if removedAny {
+            targetChanged(navigation)
+            return
+        }
+        if allReady {
+            show(ids)
+            return
+        }
+        if let failure {
+            phase = .stalled(failure)
+        } else {
             phase = .loading
             updateTargetLoadingState()
         }
         publishDiagnostics()
     }
 
-    private func show(_ id: AssetID) {
-        guard let sequence, let buffer, let image = buffer.image(for: id) else { return }
-        displayed = DisplayedSlide(id: id, image: image, cycle: sequence.cycle, position: sequence.position)
-        displayedThisCycle.insert(id)
-        skippedThisCycle.removeAll { $0 == id }
+    /// Moves past a slide with nothing left to show, in the direction of travel.
+    private func passOver(_ navigation: Navigation) {
+        if navigation == .userBackward, var sequence, sequence.retreat() {
+            self.sequence = sequence
+            targetChanged(.userBackward)
+        } else {
+            advance(navigation: navigation == .userBackward ? .userForward : navigation)
+        }
+    }
+
+    private func show(_ ids: [AssetID]) {
+        guard let sequence, let buffer else { return }
+        let photos = ids.compactMap { id in buffer.image(for: id).map { DisplayedPhoto(id: id, image: $0) } }
+        guard photos.count == ids.count else { return }
+        displayed = DisplayedSlide(
+            photos: photos,
+            cycle: sequence.cycle,
+            slideIndex: sequence.slideIndex,
+            position: sequence.position
+        )
+        displayedThisCycle.formUnion(ids)
+        skippedThisCycle.removeAll { ids.contains($0) }
         targetProgress = nil
         isRetryingTarget = false
         phase = .showing
@@ -442,17 +562,14 @@ public final class SlideshowController {
     private func handle(_ event: ImageBuffer.Event, session: Int) {
         // Events from a previous session can still be delivered while tearing down.
         guard session == sessionID, let sequence else { return }
+        let targetIDs = activeIDs(of: sequence)
         switch event {
-        case .ready(let id):
-            if id == sequence.currentID, phase == .loading {
-                show(id)
-            }
-        case .failed(let id, _):
-            if id == sequence.currentID, phase == .loading {
-                targetChanged(byNavigation: false)
+        case .ready(let id), .failed(let id, _):
+            if targetIDs.contains(id), phase == .loading {
+                targetChanged(.none)
             }
         case .started(let id, _), .progress(let id, _), .retrying(let id, _, _):
-            if id == sequence.currentID {
+            if targetIDs.contains(id) {
                 updateTargetLoadingState()
             }
         }
@@ -461,27 +578,33 @@ public final class SlideshowController {
 
     private func updateTargetLoadingState() {
         guard let sequence, let buffer else { return }
-        switch buffer.status(for: sequence.currentID) {
-        case .loading(_, let progress):
-            targetProgress = progress > 0 ? progress : nil
-            isRetryingTarget = false
-        case .waitingToRetry:
-            targetProgress = nil
-            isRetryingTarget = true
-        default:
-            targetProgress = nil
-            isRetryingTarget = false
+        var progress: [Double] = []
+        var retrying = false
+        for id in activeIDs(of: sequence) {
+            switch buffer.status(for: id) {
+            case .loading(_, let fraction):
+                progress.append(fraction)
+            case .waitingToRetry:
+                retrying = true
+            case .ready:
+                progress.append(1)
+            default:
+                progress.append(0)
+            }
         }
+        let average = progress.isEmpty ? 0 : progress.reduce(0, +) / Double(progress.count)
+        targetProgress = average > 0 && average < 1 ? average : nil
+        isRetryingTarget = retrying
     }
 
     private func refreshWindow() {
         guard let sequence, let buffer else { return }
         let finished = phase == .finished
         buffer.setWindow(
-            needed: sequence.currentID,
+            needed: activeIDs(of: sequence).isEmpty ? sequence.currentIDs : activeIDs(of: sequence),
             ahead: finished ? [] : sequence.upcoming(bufferConfiguration.prefetchAhead),
             behind: sequence.recent(bufferConfiguration.keepBehind),
-            onScreen: displayed?.id
+            onScreen: displayed?.ids ?? []
         )
     }
 
@@ -502,7 +625,7 @@ public final class SlideshowController {
         guard session == sessionID, phase == .showing, !isPaused else { return }
         slideTimer = nil
         timerStartedAt = nil
-        advance(byUser: false)
+        advance(navigation: .automatic)
     }
 
     private func cancelSlideTimer() {
@@ -537,6 +660,7 @@ public final class SlideshowController {
         displayedThisCycle = []
         skippedThisCycle = []
         removedThisCycle = []
+        excludedThisCycle = []
     }
 
     private func showNotice(_ text: String) {
@@ -569,5 +693,7 @@ public final class SlideshowController {
     /// The identifiers of the running sequence in current-cycle playback order.
     public var currentCycleIDs: [AssetID] { sequence?.currentCycleIDs ?? [] }
     public var currentTargetID: AssetID? { sequence?.currentID }
+    /// The photos on the slide playback is on.
+    public var currentTargetIDs: [AssetID] { sequence?.currentIDs ?? [] }
     public var imageBuffer: ImageBuffer? { buffer }
 }

@@ -23,6 +23,10 @@ public final class ImageBuffer {
         public var stallTimeout: Duration
         /// Cancel an attempt that runs longer than this even with progress.
         public var attemptTimeout: Duration
+        /// Upper bound for one decoded image, used for memory admission. Defaults
+        /// to a screen-sized image; larger when images are rendered bigger than
+        /// the screen (for example for panning).
+        public var estimatedImageBytes: Int?
 
         public init(
             prefetchAhead: Int = 3,
@@ -31,7 +35,8 @@ public final class ImageBuffer {
             maxDecodedBytes: Int = 300_000_000,
             retryDelays: [Duration] = [.seconds(2), .seconds(6), .seconds(15)],
             stallTimeout: Duration = .seconds(30),
-            attemptTimeout: Duration = .seconds(120)
+            attemptTimeout: Duration = .seconds(120),
+            estimatedImageBytes: Int? = nil
         ) {
             self.prefetchAhead = prefetchAhead
             self.keepBehind = keepBehind
@@ -40,6 +45,7 @@ public final class ImageBuffer {
             self.retryDelays = retryDelays
             self.stallTimeout = stallTimeout
             self.attemptTimeout = attemptTimeout
+            self.estimatedImageBytes = estimatedImageBytes
         }
 
         public var maxAttempts: Int { retryDelays.count + 1 }
@@ -150,26 +156,26 @@ public final class ImageBuffer {
     /// Declares which images are wanted, in priority order.
     ///
     /// - Parameters:
-    ///   - needed: The slide playback is waiting for or showing. Always loaded first.
-    ///   - ahead: Upcoming slides in playback order.
-    ///   - behind: Recent slides for back navigation.
-    ///   - onScreen: The image currently displayed, which must not be evicted.
+    ///   - needed: The photos on the slide playback is waiting for or showing. Always loaded first.
+    ///   - ahead: Upcoming photos in playback order.
+    ///   - behind: Recent photos for back navigation.
+    ///   - onScreen: The photos currently displayed, which must not be evicted.
     ///
     /// Anything not listed is cancelled or evicted.
-    public func setWindow(needed: AssetID?, ahead: [AssetID], behind: [AssetID], onScreen: AssetID?) {
+    public func setWindow(needed: [AssetID], ahead: [AssetID], behind: [AssetID], onScreen: [AssetID]) {
         var ordered: [AssetID] = []
         var seen: Set<AssetID> = []
-        func add(_ id: AssetID?) {
-            guard let id, seen.insert(id).inserted else { return }
+        func add(_ id: AssetID) {
+            guard seen.insert(id).inserted else { return }
             ordered.append(id)
         }
-        add(needed)
-        add(onScreen)
+        needed.forEach(add)
+        onScreen.forEach(add)
         ahead.prefix(configuration.prefetchAhead).forEach(add)
         behind.prefix(configuration.keepBehind).forEach(add)
 
         priorities = ordered
-        protected = Set([needed, onScreen].compactMap { $0 })
+        protected = Set(needed + onScreen)
 
         for id in entries.keys where !seen.contains(id) {
             discard(id)
@@ -179,6 +185,16 @@ public final class ImageBuffer {
         }
         enforceByteBudget()
         pump()
+    }
+
+    /// Single-photo convenience for `setWindow(needed:ahead:behind:onScreen:)`.
+    public func setWindow(needed: AssetID?, ahead: [AssetID], behind: [AssetID], onScreen: AssetID?) {
+        setWindow(
+            needed: needed.map { [$0] } ?? [],
+            ahead: ahead,
+            behind: behind,
+            onScreen: onScreen.map { [$0] } ?? []
+        )
     }
 
     /// Resets a failed or waiting image and loads it again with a fresh set of attempts.
@@ -213,7 +229,7 @@ public final class ImageBuffer {
 
     /// Drops everything except protected images and tightens the byte budget.
     public func handleMemoryPressure() {
-        let floor = targetPixelSize.decodedByteEstimate * 3
+        let floor = estimatedImageBytes * 3
         configuration.maxDecodedBytes = max(floor, configuration.maxDecodedBytes / 2)
         configuration.prefetchAhead = max(1, configuration.prefetchAhead - 1)
         configuration.keepBehind = max(0, configuration.keepBehind - 1)
@@ -234,6 +250,10 @@ public final class ImageBuffer {
     }
 
     // MARK: Loading
+
+    private var estimatedImageBytes: Int {
+        configuration.estimatedImageBytes ?? targetPixelSize.decodedByteEstimate
+    }
 
     private func pump() {
         var loadingCount = entries.values.filter(\.isLoading).count
@@ -256,7 +276,7 @@ public final class ImageBuffer {
 
     private func hasByteBudgetForAnotherLoad(loadingCount: Int) -> Bool {
         let readyBytes = entries.values.reduce(0) { $0 + ($1.image?.byteCost ?? 0) }
-        let estimate = targetPixelSize.decodedByteEstimate
+        let estimate = estimatedImageBytes
         return readyBytes + (loadingCount + 1) * estimate <= configuration.maxDecodedBytes
     }
 

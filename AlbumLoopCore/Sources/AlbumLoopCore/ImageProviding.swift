@@ -42,11 +42,18 @@ public struct LoadedImage: @unchecked Sendable {
     public let cgImage: CGImage?
     public let pixelSize: PixelSize
     public let byteCost: Int
+    /// Tiny pre-blurred copy used to fill the space around the photo, if requested.
+    public let backdrop: CGImage?
+    /// Centre of the detected face or subject, normalised to 0...1 with a
+    /// top-left origin, if detection ran and found something.
+    public let focus: CGPoint?
 
-    public init(cgImage: CGImage) {
+    public init(cgImage: CGImage, backdrop: CGImage? = nil, focus: CGPoint? = nil) {
         self.cgImage = cgImage
         self.pixelSize = PixelSize(width: cgImage.width, height: cgImage.height)
-        self.byteCost = cgImage.bytesPerRow * cgImage.height
+        self.backdrop = backdrop
+        self.focus = focus
+        self.byteCost = cgImage.bytesPerRow * cgImage.height + (backdrop.map { $0.bytesPerRow * $0.height } ?? 0)
     }
 
     /// Image-less value for tests and diagnostics.
@@ -54,6 +61,8 @@ public struct LoadedImage: @unchecked Sendable {
         self.cgImage = nil
         self.pixelSize = placeholderPixelSize
         self.byteCost = byteCost
+        self.backdrop = nil
+        self.focus = nil
     }
 }
 

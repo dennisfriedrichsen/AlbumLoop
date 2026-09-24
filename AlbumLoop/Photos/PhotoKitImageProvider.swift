@@ -9,6 +9,11 @@ import UIKit
 /// managed and purgeable; the app never relies on them holding anything.
 final class PhotoKitImageProvider: ImageProviding {
     private let manager = PHImageManager.default()
+    private let style: VerticalPhotoStyle
+
+    init(style: VerticalPhotoStyle) {
+        self.style = style
+    }
 
     func loadImage(
         for id: AssetID,
@@ -33,7 +38,13 @@ final class PhotoKitImageProvider: ImageProviding {
             if error == nil { progress(fraction) }
         }
 
-        let target = CGSize(width: targetPixelSize.width, height: targetPixelSize.height)
+        // Vertical photos may need more than screen height for panning or cropping.
+        let target = SlideRenderer.requestSize(
+            style: style,
+            screen: targetPixelSize,
+            assetWidth: asset.pixelWidth,
+            assetHeight: asset.pixelHeight
+        )
         let result = try await PhotoKitRequest.requestImage(
             manager: manager,
             asset: asset,
@@ -52,34 +63,7 @@ final class PhotoKitImageProvider: ImageProviding {
             }
             throw ImageLoadFailure(.other, "Photos returned no image.")
         }
-        return try await Self.render(image, fitting: targetPixelSize)
-    }
-
-    /// Decodes, orients, and downsamples an image so it fits the display.
-    /// Rendering into an 8-bit sRGB bitmap forces decoding now (not during
-    /// display) and bounds memory to at most the screen's pixel count.
-    @concurrent
-    private static func render(_ image: UIImage, fitting bounds: PixelSize) async throws -> LoadedImage {
-        let source = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        guard source.width >= 1, source.height >= 1 else {
-            throw ImageLoadFailure(.decodeFailed, "The photo has no pixels.")
-        }
-        let scale = min(1, CGFloat(bounds.width) / source.width, CGFloat(bounds.height) / source.height)
-        let size = CGSize(width: max(1, (source.width * scale).rounded()), height: max(1, (source.height * scale).rounded()))
-
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        format.preferredRange = .standard
-        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { context in
-            UIColor.black.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
-        guard let cgImage = rendered.cgImage else {
-            throw ImageLoadFailure(.decodeFailed, "The photo could not be decoded.")
-        }
-        return LoadedImage(cgImage: cgImage)
+        return try await SlideRenderer.render(image, style: style, screen: targetPixelSize)
     }
 
     static func failure(from error: any Error) -> ImageLoadFailure {

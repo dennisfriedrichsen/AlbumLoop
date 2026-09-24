@@ -12,6 +12,7 @@ struct AlbumDetailView: View {
     @AppStorage(SettingsKey.showCounter) private var showCounter = true
     @AppStorage(SettingsKey.albumOrder) private var albumOrder = AlbumOrder.album
     @AppStorage(SettingsKey.showDiagnostics) private var showDiagnostics = false
+    @AppStorage(SettingsKey.verticalStyle) private var verticalStyle = VerticalPhotoStyle.recommended
     @State private var isPlaying = false
     @FocusState private var playFocused: Bool
 
@@ -56,6 +57,17 @@ struct AlbumDetailView: View {
                         }
                     }
                 }
+                Section {
+                    Picker("Vertical Photos", selection: $verticalStyle) {
+                        ForEach(VerticalPhotoStyle.allCases) { style in
+                            Text(styleLabel(style)).tag(style)
+                        }
+                    }
+                } header: {
+                    Text("Vertical Photos")
+                } footer: {
+                    Text(verticalFooter)
+                }
                 Section("Display") {
                     Toggle("Show “Photo 12 of 600”", isOn: $showCounter)
                     Toggle("Diagnostics Overlay", isOn: $showDiagnostics)
@@ -77,9 +89,24 @@ struct AlbumDetailView: View {
                     slideDuration: .seconds(slideSeconds),
                     order: shuffle ? .shuffled : .sequential,
                     loops: loop
-                )
+                ),
+                style: verticalStyle
             )
         }
+    }
+
+    private func styleLabel(_ style: VerticalPhotoStyle) -> String {
+        style == .blurredBackground ? "\(style.label) (best for older Apple TVs)" : style.label
+    }
+
+    private var verticalFooter: String {
+        var text = verticalStyle.explanation
+        if DeviceClass.current.isOlderModel, verticalStyle != .blurredBackground {
+            text += " This Apple TV is an older model; Blurred Background runs most smoothly on it."
+        } else if !DeviceClass.current.isOlderModel, verticalStyle == .blurredBackground {
+            text += " Older Apple TVs are the Apple TV HD and Apple TV 4K (1st generation)."
+        }
+        return text
     }
 }
 
