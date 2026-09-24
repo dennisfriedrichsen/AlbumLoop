@@ -138,7 +138,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 ## Using AlbumLoop
 
-- **Albums screen:** albums are arranged in the same folders as in Photos. Folders and albums appear in the same custom order as in Photos (PhotoKit's unsorted order, which Apple doesn't document as matching Photos, so compare them on the device). A folder card shows how many albums it contains (subfolders included) and opens its own grid. Empty folders, and folders holding only Shared Albums, are hidden. Each album card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
+- **Albums screen:** albums are arranged in the same folders as in Photos. Folders and albums appear in the same custom order as in Photos (PhotoKit's unsorted order; Apple doesn't document that it matches Photos, but it did on an Apple TV HD with tvOS 26.6 on 2026‑09‑24). A folder card shows how many albums it contains (subfolders included) and opens its own grid. Empty folders, and folders holding only Shared Albums, are hidden. Each album card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's first photo. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
 - **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), Vertical Photos, the "Photo 12 of 600" counter, and the diagnostics overlay.
 - **Vertical Photos** (how photos that don't fill a 16:9 TV are shown):
 
@@ -301,6 +301,7 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | App launches and plays the demo slideshow; system Photos prompt shows the usage text | tvOS 26.5 Simulator | ✅ Seen in screenshots |
 | Siri Remote input (left/right, Play/Pause, click, Back) | — | ⚠️ **Not yet exercised.** Needs a person with a remote, in the Simulator or on the device |
 | Album enumeration against a real iCloud library | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 157 albums listed in 0.4 s; counts and covers filled in within 9 s |
+| Folders and albums in the same custom order as My Albums in Photos | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ Order matched Photos (2026‑09‑24) |
 | Album counts match Photos | Physical Apple TV | ❌ **Not yet compared** (checklist 2.2) |
 | Full sequential playback of a large album | Apple TV HD (AppleTV5,3), tvOS 26.6 | ✅ 392-photo album: every photo downloaded and displayed |
 | Vertical styles: layout, pan motion, pairs, crossfade with no black frames | tvOS 26.5 Simulator, `-demoSlideshow -verticalStyle …`, screenshots and frame analysis of screen recordings | ✅ All five styles render; no black or jumping frames at slide changes |
