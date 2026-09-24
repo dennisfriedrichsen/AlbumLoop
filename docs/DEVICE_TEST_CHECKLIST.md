@@ -31,6 +31,7 @@ Record each result as ✅ / ❌ / ⚠️ with notes, and keep the filled-in copy
 ## 2. Albums and counts
 
 - [ ] **2.1** Every ordinary album you expect is listed, including albums inside folders. Shared Albums are not listed.
+- [ ] **2.1a** Folders from Photos appear as folder cards, and folders and albums are in the same order as My Albums in Photos (rearrange a few in Photos first to test). *Order matched Photos on 2026‑09‑24, Apple TV HD, tvOS 26.6.* Opening a folder shows the same albums and subfolders as in Photos, and Back returns to the parent. Albums inside folders are not also listed at the top level. Folders that are empty or hold only Shared Albums are hidden.
 - [ ] **2.2** For at least 3 albums, compare the card count with Photos on iPhone or Mac: the card should equal *items − videos*. Note any mismatch: ______
 - [ ] **2.3** Album covers load, including for albums you haven't opened on the Apple TV.
 - [ ] **2.4** Turn on **Diagnostics Overlay** in an album's settings. The Albums header shows "eligible albums: N"; confirm N matches the albums that have photos.

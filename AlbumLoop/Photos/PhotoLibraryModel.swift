@@ -12,6 +12,35 @@ struct AlbumSummary: Identifiable, Hashable, Sendable {
     var keyAssetID: String?
 }
 
+/// A folder of albums (and other folders) as organized in Photos.
+struct AlbumFolder: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    var items: [LibraryItem]
+}
+
+/// One entry in the album browser: an album, or a folder that opens its own grid.
+enum LibraryItem: Identifiable, Hashable, Sendable {
+    case album(id: String)
+    case folder(id: String)
+
+    var id: String {
+        switch self {
+        case .album(let id): "album:\(id)"
+        case .folder(let id): "folder:\(id)"
+        }
+    }
+}
+
+/// Albums and the folder tree they're arranged in.
+struct AlbumListing: Sendable {
+    var albums: [AlbumSummary]
+    /// Items at the top level of My Albums.
+    var rootItems: [LibraryItem]
+    /// Every non-empty folder, by identifier.
+    var folders: [String: AlbumFolder]
+}
+
 /// Snapshot of an album's eligible photos taken when a slideshow starts.
 struct AlbumSnapshot: Sendable {
     /// Still photos in playback order.
@@ -55,7 +84,13 @@ final class PhotoLibraryModel {
     }
 
     private(set) var access: Access
-    private(set) var albums: [AlbumSummary] = []
+    private(set) var albums: [AlbumSummary] = [] {
+        didSet { albumIndex = Dictionary(albums.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+    }
+    /// Top level of the folder tree, as in My Albums in Photos.
+    private(set) var rootItems: [LibraryItem] = []
+    private(set) var folders: [String: AlbumFolder] = [:]
+    private var albumIndex: [String: Int] = [:]
     private(set) var isLoadingAlbums = false
     private(set) var hasLoadedAlbums = false
     /// Albums whose photo count is known during the current scan.
@@ -143,17 +178,20 @@ final class PhotoLibraryModel {
         let clock = ContinuousClock()
         let start = clock.now
 
-        let listed = await Task.detached(priority: .userInitiated) {
+        let listing = await Task.detached(priority: .userInitiated) {
             AlbumFetcher.fetchAlbumList()
         }.value
+        let listed = listing.albums
         // Keep counts from a previous scan so a rescan doesn't blank the grid.
         let previous = Dictionary(albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        albums = listed.map { album in
-            var album = album
-            album.photoCount = previous[album.id]?.photoCount
-            album.keyAssetID = previous[album.id]?.keyAssetID
-            return album
+        var merged = listed
+        for index in merged.indices {
+            merged[index].photoCount = previous[merged[index].id]?.photoCount
+            merged[index].keyAssetID = previous[merged[index].id]?.keyAssetID
         }
+        albums = merged
+        rootItems = listing.rootItems
+        folders = listing.folders
         countedAlbums = 0
         hasLoadedAlbums = true
         let listedAt = clock.now
@@ -169,12 +207,15 @@ final class PhotoLibraryModel {
                 AlbumFetcher.fetchDetails(albumIDs: batch)
             }.value
             timing.add(batchTiming)
-            for index in albums.indices {
-                if let detail = details[albums[index].id] {
-                    albums[index].photoCount = detail.count
-                    albums[index].keyAssetID = detail.keyAssetID
+            // Assign once per batch so observers (and the index) update once.
+            var updated = albums
+            for index in updated.indices {
+                if let detail = details[updated[index].id] {
+                    updated[index].photoCount = detail.count
+                    updated[index].keyAssetID = detail.keyAssetID
                 }
             }
+            albums = updated
             countedAlbums = min(ids.count, batchStart + batch.count)
         }
 
@@ -185,6 +226,21 @@ final class PhotoLibraryModel {
         if rescanPending && !defersAlbumRescans {
             rescanPending = false
             await loadAlbums()
+        }
+    }
+
+    func album(id: String) -> AlbumSummary? {
+        albumIndex[id].map { albums[$0] }
+    }
+
+    /// Every album inside the folder, including those in subfolders.
+    func albums(inFolder folderID: String) -> [AlbumSummary] {
+        guard let folder = folders[folderID] else { return [] }
+        return folder.items.flatMap { item -> [AlbumSummary] in
+            switch item {
+            case .album(let id): album(id: id).map { [$0] } ?? []
+            case .folder(let id): albums(inFolder: id)
+            }
         }
     }
 
@@ -274,10 +330,10 @@ enum AlbumFetcher {
         }
     }
 
-    /// Album identifiers and titles only (fast). Counts are filled in separately.
-    static func fetchAlbumList() -> [AlbumSummary] {
-        // Ordinary user albums only (includes albums inside folders). Shared
-        // albums use a different subtype and are intentionally excluded.
+    /// Album identifiers, titles, and the folder tree (fast). Counts are filled in separately.
+    static func fetchAlbumList() -> AlbumListing {
+        // Ordinary user albums only. Shared albums use a different subtype and
+        // are intentionally excluded.
         let collections = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
         var albums: [AlbumSummary] = []
         collections.enumerateObjects { collection, _, _ in
@@ -288,7 +344,73 @@ enum AlbumFetcher {
                 keyAssetID: nil
             ))
         }
-        return albums.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        // Fallback order for albums the folder walk doesn't reach.
+        albums.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+
+        // Walk the folders in My Albums so the browser mirrors them. With no
+        // sort descriptors PhotoKit returns each level in the custom order set
+        // in Photos. Apple doesn't document this, so check it on a device.
+        let albumIDs = Set(albums.map(\.id))
+        var folders: [String: AlbumFolder] = [:]
+        var placed: Set<String> = []
+        var order: [String] = []
+        var visited: Set<String> = []
+        var rootItems = items(
+            in: PHCollectionList.fetchTopLevelUserCollections(with: nil),
+            albumIDs: albumIDs,
+            folders: &folders,
+            placed: &placed,
+            order: &order,
+            visited: &visited
+        )
+        // Anything the folder walk didn't reach still appears at the top level.
+        for album in albums where !placed.contains(album.id) {
+            rootItems.append(.album(id: album.id))
+        }
+        // Count albums in the order they're shown, so visible cards fill in first.
+        let position = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        albums.sort { lhs, rhs in
+            let (l, r) = (position[lhs.id] ?? .max, position[rhs.id] ?? .max)
+            if l != r { return l < r }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+        return AlbumListing(albums: albums, rootItems: rootItems, folders: folders)
+    }
+
+    /// Albums and non-empty folders in one level of the tree, recursing into folders.
+    private static func items(
+        in collections: PHFetchResult<PHCollection>,
+        albumIDs: Set<String>,
+        folders: inout [String: AlbumFolder],
+        placed: inout Set<String>,
+        order: inout [String],
+        visited: inout Set<String>
+    ) -> [LibraryItem] {
+        var result: [LibraryItem] = []
+        for index in 0..<collections.count {
+            let collection = collections.object(at: index)
+            let id = collection.localIdentifier
+            if collection is PHAssetCollection {
+                if albumIDs.contains(id), placed.insert(id).inserted {
+                    order.append(id)
+                    result.append(.album(id: id))
+                }
+            } else if let list = collection as? PHCollectionList, visited.insert(id).inserted {
+                let children = items(
+                    in: PHCollection.fetchCollections(in: list, options: nil),
+                    albumIDs: albumIDs,
+                    folders: &folders,
+                    placed: &placed,
+                    order: &order,
+                    visited: &visited
+                )
+                // Folders holding only shared albums or empty folders are skipped.
+                guard !children.isEmpty else { continue }
+                folders[id] = AlbumFolder(id: id, title: list.localizedTitle ?? "Untitled Folder", items: children)
+                result.append(.folder(id: id))
+            }
+        }
+        return result
     }
 
     /// Eligible still-photo count and cover photo for each album.

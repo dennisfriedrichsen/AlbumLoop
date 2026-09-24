@@ -34,6 +34,7 @@ struct RootView: View {
                 .navigationDestination(for: AppDestination.self) { destination in
                     switch destination {
                     case .about: AboutView()
+                    case .folder(let id): AlbumGridView(folderID: id)
                     }
                 }
         }
@@ -77,6 +78,7 @@ struct RootView: View {
 
 enum AppDestination: Hashable {
     case about
+    case folder(id: String)
 }
 
 /// First-launch explanation shown before the system permission prompt.
