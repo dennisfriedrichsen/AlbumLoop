@@ -30,8 +30,8 @@ struct SlideshowView: View {
 
     private var hasPanel: Bool {
         switch controller.phase {
-        case .stalled, .finished, .failed: true
-        case .idle, .loading, .showing: false
+        case .stalled, .failed: true
+        case .idle, .loading, .showing, .finished: false
         }
     }
 
@@ -68,6 +68,10 @@ struct SlideshowView: View {
         }
         .onChange(of: hasPanel, initial: true) { _, showing in
             focus = showing ? .panel : (controlsVisible ? .controls : .canvas)
+        }
+        .onChange(of: controller.phase) { _, phase in
+            // With loop off, the end of the album returns to the album screen.
+            if phase == .finished { onExit() }
         }
         .onDisappear { hideControlsTask?.cancel() }
     }
@@ -240,22 +244,13 @@ struct SlideshowView: View {
                 Button("Skip Photo") { controller.skipCurrent() }
                 Button("Exit", action: onExit)
             }
-        case .finished:
-            PanelView(
-                title: "Slideshow Finished",
-                message: controller.lastCycleReport?.summary ?? ""
-            ) {
-                Button("Play Again", action: onRestart)
-                    .focused($focus, equals: .panel)
-                Button("Done", action: onExit)
-            }
         case .failed(let message):
             PanelView(title: "Can’t Continue", message: message) {
                 Button("Try Again", action: onRestart)
                     .focused($focus, equals: .panel)
                 Button("Done", action: onExit)
             }
-        case .idle, .loading, .showing:
+        case .idle, .loading, .showing, .finished:
             EmptyView()
         }
     }
@@ -265,7 +260,11 @@ struct SlideshowView: View {
         if !isNetworkAvailable {
             lines.append("This Apple TV appears to be offline. AlbumLoop will try again automatically when the network returns.")
         }
-        lines.append("The slideshow is holding here. Nothing is skipped unless you choose Skip Photo, and skipped photos are listed at the end of the cycle.")
+        var holding = "The slideshow is holding here. Nothing is skipped unless you choose Skip Photo."
+        if controller.settings.loops {
+            holding += " Skipped photos are noted at the end of each cycle."
+        }
+        lines.append(holding)
         return lines.joined(separator: "\n\n")
     }
 
