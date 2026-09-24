@@ -9,6 +9,8 @@ struct AlbumSummary: Identifiable, Hashable, Sendable {
     /// Still photos (including Live Photos, shown as stills). Videos are excluded.
     /// Nil while the album is still being counted.
     var photoCount: Int?
+    /// Cover photo: the album's key photo in Photos once known, otherwise its
+    /// first still photo as a stand-in.
     var keyAssetID: String?
 }
 
@@ -102,9 +104,12 @@ final class PhotoLibraryModel {
     /// `libraryRevision` change so it can re-snapshot its own album.
     var defersAlbumRescans = false {
         didSet {
-            if !defersAlbumRescans, rescanPending {
+            guard !defersAlbumRescans else { return }
+            if rescanPending {
                 rescanPending = false
                 Task { await loadAlbums() }
+            } else if !pendingKeyPhotoIDs.isEmpty {
+                refreshKeyPhotos(albumIDs: pendingKeyPhotoIDs)
             }
         }
     }
@@ -114,8 +119,17 @@ final class PhotoLibraryModel {
     private var changeDebounce: Task<Void, Never>?
     private var rescanPending = false
 
+    /// Key photos by album identifier, persisted so covers are right from launch.
+    private var keyPhotos = KeyPhotoStore.load()
+    private var keyPhotoTask: Task<Void, Never>?
+    /// Albums still to check when a key-photo refresh was paused by a slideshow.
+    private var pendingKeyPhotoIDs: [String] = []
+
     /// Albums are counted in batches so the grid fills in progressively.
     private static let countBatchSize = 12
+    /// Key photos are slow to fetch (~0.2 s per album on an Apple TV HD), so they're
+    /// fetched in small batches after counting, at low priority.
+    private static let keyPhotoBatchSize = 6
 
     /// Set once the user has pressed Continue on the explanation screen.
     ///
@@ -175,6 +189,8 @@ final class PhotoLibraryModel {
             return
         }
         isLoadingAlbums = true
+        keyPhotoTask?.cancel()
+        pendingKeyPhotoIDs = []
         let clock = ContinuousClock()
         let start = clock.now
 
@@ -182,12 +198,20 @@ final class PhotoLibraryModel {
             AlbumFetcher.fetchAlbumList()
         }.value
         let listed = listing.albums
-        // Keep counts from a previous scan so a rescan doesn't blank the grid.
+        // Forget key photos of albums that no longer exist.
+        let listedIDs = Set(listed.map(\.id))
+        if keyPhotos.keys.contains(where: { !listedIDs.contains($0) }) {
+            keyPhotos = keyPhotos.filter { listedIDs.contains($0.key) }
+            KeyPhotoStore.save(keyPhotos)
+        }
+        // Keep counts from a previous scan so a rescan doesn't blank the grid,
+        // and show saved key photos straight away.
         let previous = Dictionary(albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var merged = listed
         for index in merged.indices {
-            merged[index].photoCount = previous[merged[index].id]?.photoCount
-            merged[index].keyAssetID = previous[merged[index].id]?.keyAssetID
+            let id = merged[index].id
+            merged[index].photoCount = previous[id]?.photoCount
+            merged[index].keyAssetID = keyPhotos[id] ?? previous[id]?.keyAssetID
         }
         albums = merged
         rootItems = listing.rootItems
@@ -203,16 +227,21 @@ final class PhotoLibraryModel {
         let ids = listed.map(\.id)
         for batchStart in stride(from: 0, to: ids.count, by: Self.countBatchSize) {
             let batch = Array(ids[batchStart..<min(batchStart + Self.countBatchSize, ids.count)])
+            // Albums with a saved key photo don't need a stand-in cover.
+            let needsCover = Set(batch.filter { keyPhotos[$0] == nil })
             let (details, batchTiming) = await Task.detached(priority: .userInitiated) {
-                AlbumFetcher.fetchDetails(albumIDs: batch)
+                AlbumFetcher.fetchDetails(albumIDs: batch, coverFor: needsCover)
             }.value
             timing.add(batchTiming)
             // Assign once per batch so observers (and the index) update once.
             var updated = albums
             for index in updated.indices {
-                if let detail = details[updated[index].id] {
+                let id = updated[index].id
+                if let detail = details[id] {
                     updated[index].photoCount = detail.count
-                    updated[index].keyAssetID = detail.keyAssetID
+                    if keyPhotos[id] == nil {
+                        updated[index].keyAssetID = detail.keyAssetID
+                    }
                 }
             }
             albums = updated
@@ -226,7 +255,67 @@ final class PhotoLibraryModel {
         if rescanPending && !defersAlbumRescans {
             rescanPending = false
             await loadAlbums()
+            return
         }
+        refreshKeyPhotos(albumIDs: ids)
+    }
+
+    /// Replaces stand-in covers with each album's key photo from Photos, in display
+    /// order, and saves them. Runs after counting; pauses during a slideshow so it
+    /// doesn't compete with photo downloads, and resumes when the slideshow ends.
+    private func refreshKeyPhotos(albumIDs: [String]) {
+        keyPhotoTask?.cancel()
+        pendingKeyPhotoIDs = []
+        keyPhotoTask = Task { [weak self] in
+            let clock = ContinuousClock()
+            let start = clock.now
+            var changed = 0
+            for batchStart in stride(from: 0, to: albumIDs.count, by: Self.keyPhotoBatchSize) {
+                guard let self, !Task.isCancelled else { return }
+                if self.defersAlbumRescans {
+                    self.pendingKeyPhotoIDs = Array(albumIDs[batchStart...])
+                    AlbumLoopLog.library.info("Key photos paused with \(self.pendingKeyPhotoIDs.count) albums left")
+                    return
+                }
+                let batch = Array(albumIDs[batchStart..<min(batchStart + Self.keyPhotoBatchSize, albumIDs.count)])
+                let results = await Task.detached(priority: .utility) {
+                    AlbumFetcher.fetchKeyPhotos(albumIDs: batch)
+                }.value
+                guard !Task.isCancelled else { return }
+                changed += self.apply(keyPhotos: results)
+            }
+            AlbumLoopLog.library.info(
+                "Checked key photos for \(albumIDs.count) albums in \(String(describing: clock.now - start)) (\(changed) changed)"
+            )
+        }
+    }
+
+    /// Stores fetched key photos and updates covers. Returns how many covers changed.
+    private func apply(keyPhotos results: [String: String?]) -> Int {
+        var saved = keyPhotos
+        for (albumID, keyID) in results {
+            saved[albumID] = keyID
+        }
+        if saved != keyPhotos {
+            keyPhotos = saved
+            KeyPhotoStore.save(saved)
+        }
+        var updated = albums
+        var changed = 0
+        for index in updated.indices {
+            let id = updated[index].id
+            guard let result = results[id] else { continue }
+            // Without a key photo the stand-in stays, unless the album is now empty.
+            let cover = result ?? (updated[index].photoCount == 0 ? nil : updated[index].keyAssetID)
+            if updated[index].keyAssetID != cover {
+                updated[index].keyAssetID = cover
+                changed += 1
+            }
+        }
+        if changed > 0 {
+            albums = updated
+        }
+        return changed
     }
 
     func album(id: String) -> AlbumSummary? {
@@ -310,6 +399,20 @@ private final class LibraryObserver: NSObject, PHPhotoLibraryChangeObserver, PHP
     func photoLibraryDidBecomeUnavailable(_ photoLibrary: PHPhotoLibrary) {
         let reason = photoLibrary.unavailabilityReason?.localizedDescription ?? "The photo library is unavailable."
         onUnavailable?(reason)
+    }
+}
+
+/// Saved key-photo identifiers by album identifier. Only local identifiers are
+/// stored; the thumbnails themselves come from PhotoKit's own cache.
+enum KeyPhotoStore {
+    private static let key = "albumKeyPhotos"
+
+    static func load() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+    }
+
+    static func save(_ keyPhotos: [String: String]) {
+        UserDefaults.standard.set(keyPhotos, forKey: key)
     }
 }
 
@@ -413,13 +516,15 @@ enum AlbumFetcher {
         return result
     }
 
-    /// Eligible still-photo count and cover photo for each album.
+    /// Eligible still-photo count for each album, plus a stand-in cover (its first
+    /// still photo) for the albums in `coverFor`.
     ///
     /// Measured on an Apple TV HD with 157 albums: an unfiltered fetch plus
     /// `countOfAssets(with: .image)` took ~4 s in total, versus 20–32 s for a fetch
     /// with a `mediaType` predicate (same counts), and `fetchKeyAssets` took 20–34 s
-    /// versus ~3 s for using the album's first photo as its cover.
-    static func fetchDetails(albumIDs: [String]) -> ([String: Detail], Timing) {
+    /// versus ~3 s for using the album's first photo as its cover. Key photos are
+    /// therefore fetched afterwards by `fetchKeyPhotos` and saved between launches.
+    static func fetchDetails(albumIDs: [String], coverFor: Set<String>) -> ([String: Detail], Timing) {
         let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: albumIDs, options: nil)
         let clock = ContinuousClock()
         var timing = Timing()
@@ -431,7 +536,7 @@ enum AlbumFetcher {
             let coverStart = clock.now
             timing.counting += coverStart - countStart
             var cover: String?
-            if count > 0 {
+            if count > 0, coverFor.contains(collection.localIdentifier) {
                 // First still photo in album order (usually the very first item).
                 assets.enumerateObjects { asset, _, stop in
                     if asset.mediaType == .image {
@@ -444,6 +549,18 @@ enum AlbumFetcher {
             details[collection.localIdentifier] = Detail(count: count, keyAssetID: cover)
         }
         return (details, timing)
+    }
+
+    /// Each album's key photo as chosen in Photos, or nil when it has none.
+    /// Albums that no longer exist are left out.
+    static func fetchKeyPhotos(albumIDs: [String]) -> [String: String?] {
+        let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: albumIDs, options: nil)
+        var result: [String: String?] = [:]
+        collections.enumerateObjects { collection, _, _ in
+            let key = PHAsset.fetchKeyAssets(in: collection, options: nil)?.firstObject
+            result[collection.localIdentifier] = .some(key?.localIdentifier)
+        }
+        return result
     }
 
     static func snapshot(albumID: String, order: AlbumOrder) -> AlbumSnapshot? {
