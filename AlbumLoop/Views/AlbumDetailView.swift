@@ -48,25 +48,20 @@ struct AlbumDetailView: View {
             Form {
                 Section("Playback") {
                     Toggle("Shuffle", isOn: $shuffle)
-                    Picker("Order", selection: $albumOrder) {
-                        ForEach(AlbumOrder.allCases) { order in
-                            Text(order.label).tag(order)
-                        }
-                    }
+                    ChoicePicker("Order", selection: $albumOrder, options: AlbumOrder.allCases) { $0.label }
                     .disabled(shuffle)
                     Toggle("Loop", isOn: $loop)
-                    Picker("Slide Duration", selection: $slideSeconds) {
-                        ForEach(SettingsDefault.durations, id: \.self) { seconds in
-                            Text("\(seconds) seconds").tag(seconds)
-                        }
+                    ChoicePicker("Slide Duration", selection: $slideSeconds, options: SettingsDefault.durations) {
+                        "\($0) seconds"
                     }
                 }
                 Section {
-                    Picker("Vertical Photos", selection: $verticalStyle) {
-                        ForEach(VerticalPhotoStyle.allCases) { style in
-                            Text(styleLabel(style)).tag(style)
-                        }
-                    }
+                    ChoicePicker(
+                        "Vertical Photos",
+                        selection: $verticalStyle,
+                        options: VerticalPhotoStyle.allCases,
+                        label: styleLabel
+                    )
                 } header: {
                     Text("Vertical Photos")
                 } footer: {
