@@ -66,13 +66,20 @@ struct SlideshowScreen: View {
 
     private func prepare() async {
         guard controller == nil else { return }
-        var provider: any ImageProviding = PhotoKitImageProvider()
-        var snapshot = await library.assetIDs(forAlbum: album.id, order: order)
+        let provider: any ImageProviding
+        let snapshot: [AssetID]?
         #if DEBUG
         if DemoImageProvider.isEnabled {
+            // Never touch PhotoKit in demo mode (it would trigger the permission prompt).
             provider = DemoImageProvider()
             snapshot = DemoImageProvider.ids()
+        } else {
+            provider = PhotoKitImageProvider()
+            snapshot = await library.assetIDs(forAlbum: album.id, order: order)
         }
+        #else
+        provider = PhotoKitImageProvider()
+        snapshot = await library.assetIDs(forAlbum: album.id, order: order)
         #endif
         guard let ids = snapshot else {
             preparationError = "This album is no longer in your library."

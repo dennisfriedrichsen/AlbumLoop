@@ -23,8 +23,8 @@ Record each result as ✅ / ❌ / ⚠️ with notes, and keep the filled-in copy
 
 ## 1. Permissions and states
 
-- [ ] **1.1** First launch shows the explanation screen. **Continue** shows the system prompt, and its text matches the app's usage description.
-- [ ] **1.2** Allowing access shows the album grid.
+- [ ] **1.1** First launch shows the explanation screen **with no system prompt on top of it**. **Continue** shows the system prompt, and its text matches the app's usage description.
+- [ ] **1.2** Choose **Allow access to all Photos**, not "Select" (limited access), and the album grid appears. Optional: on a reinstall, try "Select" and confirm the header says "Limited access."
 - [ ] **1.3** Deny path: delete and reinstall the app, deny access, and confirm the "Photos Access Is Off" screen. Follow its Settings path. **Is the path shown correct on this tvOS version?** Actual path: ______
 - [ ] **1.4** Re-enable access in Settings, return to the app, and confirm the grid appears without relaunching.
 

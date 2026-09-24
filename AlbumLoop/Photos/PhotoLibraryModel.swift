@@ -56,8 +56,22 @@ final class PhotoLibraryModel {
     private var isObserving = false
     private var changeDebounce: Task<Void, Never>?
 
+    /// Set once the user has pressed Continue on the explanation screen.
+    ///
+    /// On tvOS 26 (seen on the 26.5 simulator), merely calling
+    /// `authorizationStatus(for:)` while the status is undetermined shows the
+    /// system prompt, which would cover the explanation screen at launch. Until
+    /// the user asks, the app therefore assumes "not determined" without querying.
+    private static let hasRequestedAccessKey = "hasRequestedPhotosAccess"
+    private var hasRequestedAccess: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.hasRequestedAccessKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.hasRequestedAccessKey) }
+    }
+
     init() {
-        access = Self.map(PHPhotoLibrary.authorizationStatus(for: .readWrite))
+        access = UserDefaults.standard.bool(forKey: Self.hasRequestedAccessKey)
+            ? Self.map(PHPhotoLibrary.authorizationStatus(for: .readWrite))
+            : .notDetermined
         observer.onChange = { [weak self] in
             Task { @MainActor in self?.libraryDidChange() }
         }
@@ -71,6 +85,7 @@ final class PhotoLibraryModel {
 
     /// Shows the system Photos permission prompt (first launch only).
     func requestAccess() async {
+        hasRequestedAccess = true
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         access = Self.map(status)
         AlbumLoopLog.library.info("Photos authorization: \(String(describing: self.access), privacy: .public)")
@@ -81,6 +96,7 @@ final class PhotoLibraryModel {
 
     /// Re-reads the authorization state, e.g. when returning from Settings.
     func refreshAccess() {
+        guard hasRequestedAccess else { return }
         let updated = Self.map(PHPhotoLibrary.authorizationStatus(for: .readWrite))
         if case .unavailable = access, updated == .authorized { return }
         access = updated

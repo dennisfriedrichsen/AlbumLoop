@@ -45,11 +45,13 @@ On the built-in slideshow looping over its first ~10 photos: that behaviour is c
 | | |
 |---|---|
 | Deployment target | **tvOS 18.0** |
-| Built and tested with | Xcode 27.0 (27A266a), tvOS 27.0 SDK, Swift 6.4 |
-| Hardware | Any Apple TV that runs tvOS 18 (Apple TV HD and all Apple TV 4K models) |
+| Built and tested with | Xcode 27.0 (27A266a), tvOS 27.0 SDK, Swift 6.4; simulator-tested on tvOS 26.5 and 27.0 |
+| Hardware | Any Apple TV on tvOS 18 or later: Apple TV HD and **every** Apple TV 4K generation |
 | On the Apple TV | Signed in to your Apple Account, with **iCloud Photos turned on** (Settings › Users and Accounts › *your account* › iCloud) |
 
 **Why tvOS 18:** PhotoKit's required pieces need only tvOS 14 or earlier. The deployment target is set by the app's own code: the Observation framework (`@Observable`, tvOS 17), `Synchronization.Mutex` (tvOS 18), and current SwiftUI focus and command APIs. tvOS 18 runs on every Apple TV that can run tvOS 17, so raising the target costs no hardware, and it matches the iOS 18 baseline used across these projects.
+
+**Older Apple TVs:** tvOS 27 dropped the Apple TV HD and the **Apple TV 4K (1st generation, model A1842)**, so tvOS 26 is the last version they run. Because the minimum is tvOS 18, AlbumLoop runs on tvOS 26 with no changes; the deployment target is a minimum, not the version you build with. Building with the tvOS 27 SDK in Xcode 27 still installs on a tvOS 26 device. Don't raise the deployment target above 26 while you use one of these models. To check your model, see Settings › General › About, and compare the model number with Apple's [Identify your Apple TV model](https://support.apple.com/en-us/101605).
 
 ---
 
@@ -124,7 +126,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 1. In the Xcode toolbar choose the **AlbumLoop** scheme and your Apple TV as the destination.
 2. Press ⌘R. The first install to a new device can take a while.
-3. On first launch AlbumLoop explains why it needs Photos access. Choose **Continue**, then allow access.
+3. On first launch AlbumLoop explains why it needs Photos access. Choose **Continue**, then choose **Allow access to all Photos**. The tvOS 26 prompt also offers a **Select** (limited access) option; with that, AlbumLoop sees only the photos you picked, so albums would look incomplete.
 4. After that, AlbumLoop appears on the Home screen and you can launch it without Xcode, until the profile expires (7 days with a free account).
 
 **Troubleshooting**
@@ -265,10 +267,11 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 | Check | Where | Result |
 |---|---|---|
 | Core logic tests (34) | macOS, `swift test` | ✅ Pass (5 consecutive runs) |
-| Core logic tests (34) | tvOS 27.0 Simulator, `xcodebuild test` | ✅ Pass |
+| Core logic tests (34) | tvOS 27.0 and tvOS 26.5 Simulators, `xcodebuild test` | ✅ Pass |
 | App compiles, Swift 6 language mode | tvOS Simulator SDK and **device** SDK (unsigned) | ✅ Builds with no Swift warnings |
 | Welcome screen and empty-library state | tvOS Simulator (Photos permission granted with `simctl`) | ✅ Rendered |
-| Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
+| Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |
+| App launches and plays the demo slideshow; system Photos prompt shows the usage text | tvOS 26.5 Simulator | ✅ Seen in screenshots |
 | Siri Remote input (left/right, Play/Pause, click, Back) | — | ⚠️ **Not yet exercised.** Needs a person with a remote, in the Simulator or on the device |
 | Album enumeration and counts against a real iCloud library | Physical Apple TV | ❌ **Not verified** |
 | Downloading photos that aren't on the device | Physical Apple TV | ❌ **Not verified** |
