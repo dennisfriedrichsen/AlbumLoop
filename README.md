@@ -67,6 +67,12 @@ Open the **workspace**, not the `.xcodeproj`. The workspace includes the local `
 
 The app has no third-party dependencies.
 
+### App icon
+
+The app uses the selected Stillroom icon: two interwoven frames with a saturated violet-to-cyan gradient. The approved source is `design/app-icon-options/stillroom-b-vibrant.png`. Regenerate the Home screen (400×240 and 800×480) and App Store (1280×768) assets from the repository root with `swift scripts/export-app-icon.swift`.
+
+The artwork is flattened into the back layer with a transparent front layer to preserve the approved design; it does not have separate foreground parallax. The app name and Top Shelf artwork remain unchanged.
+
 Command-line equivalents:
 
 ```bash
