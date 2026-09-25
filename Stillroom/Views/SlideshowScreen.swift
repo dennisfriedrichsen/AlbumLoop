@@ -212,3 +212,12 @@ struct SlideshowRequest: Identifiable {
     let album: AlbumSummary
     let resume: ResumePoint?
 }
+
+/// The one place slideshows are presented from, so the album screen, the
+/// Recently Played row, and Top Shelf links all share a single full-screen cover.
+/// Setting a new request while one is showing replaces it.
+@MainActor
+@Observable
+final class PlaybackRouter {
+    var request: SlideshowRequest?
+}

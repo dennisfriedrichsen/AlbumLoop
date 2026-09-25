@@ -7,8 +7,8 @@ struct AlbumGridView: View {
 
     @Environment(PhotoLibraryModel.self) private var library
     @Environment(RecentPlaybackStore.self) private var recents
+    @Environment(PlaybackRouter.self) private var router
     @AppStorage(SettingsKey.showDiagnostics) private var showDiagnostics = false
-    @State private var request: SlideshowRequest?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 48), count: 4)
 
@@ -78,9 +78,6 @@ struct AlbumGridView: View {
                 await library.loadAlbums()
             }
         }
-        .fullScreenCover(item: $request) { request in
-            SlideshowLaunch(album: request.album, resume: request.resume)
-        }
     }
 
     /// Recently played albums still in the library, newest first.
@@ -101,7 +98,7 @@ struct AlbumGridView: View {
                 LazyHStack(spacing: 48) {
                     ForEach(recentAlbums, id: \.album.id) { item in
                         Button {
-                            request = SlideshowRequest(album: item.album, resume: item.entry.resume)
+                            router.request = SlideshowRequest(album: item.album, resume: item.entry.resume)
                         } label: {
                             RecentAlbumCard(album: item.album, resume: item.entry.resume)
                         }
@@ -109,7 +106,7 @@ struct AlbumGridView: View {
                         .contextMenu {
                             if item.entry.resume != nil {
                                 Button("Start Over", systemImage: "arrow.counterclockwise") {
-                                    request = SlideshowRequest(album: item.album, resume: nil)
+                                    router.request = SlideshowRequest(album: item.album, resume: nil)
                                 }
                             }
                             Button("Remove from Recently Played", systemImage: "minus.circle", role: .destructive) {

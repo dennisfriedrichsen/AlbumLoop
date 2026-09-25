@@ -4,7 +4,11 @@ import SwiftUI
 /// Routes between the Photos-access states and the album browser.
 struct RootView: View {
     @Environment(PhotoLibraryModel.self) private var library
+    @Environment(RecentPlaybackStore.self) private var recents
+    @Environment(PlaybackRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
+    /// Album from a Top Shelf link, held until the album list has loaded.
+    @State private var pendingAlbumID: String?
 
     var body: some View {
         #if DEBUG
@@ -26,7 +30,8 @@ struct RootView: View {
     }
 
     private var browser: some View {
-        NavigationStack {
+        @Bindable var router = router
+        return NavigationStack {
             content
                 .navigationDestination(for: AlbumSummary.self) { album in
                     AlbumDetailView(album: album)
@@ -42,6 +47,29 @@ struct RootView: View {
             // The user may have changed permission in Settings while away.
             if phase == .active { library.refreshAccess() }
         }
+        .fullScreenCover(item: $router.request) { request in
+            SlideshowLaunch(album: request.album, resume: request.resume)
+        }
+        .onOpenURL { url in
+            pendingAlbumID = TopShelfFeed.albumID(from: url)
+            openPendingAlbum()
+        }
+        .onChange(of: library.hasLoadedAlbums) { openPendingAlbum() }
+        .task(id: TopShelfInputs(recents: recents.items, albums: library.albums)) {
+            // Coalesce the saves made on every slide change.
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            StillroomLog.library.info("Top Shelf: updating from \(recents.items.count) recent albums")
+            await TopShelfPublisher.publish(recents: recents.items, library: library)
+        }
+    }
+
+    /// Plays (or resumes) the album a Top Shelf item was selected for.
+    private func openPendingAlbum() {
+        guard let id = pendingAlbumID, library.hasLoadedAlbums else { return }
+        pendingAlbumID = nil
+        guard let album = library.album(id: id), album.photoCount != 0 else { return }
+        router.request = SlideshowRequest(album: album, resume: recents.entry(for: id)?.resume)
     }
 
     @ViewBuilder
@@ -74,6 +102,11 @@ struct RootView: View {
             )
         }
     }
+}
+
+private struct TopShelfInputs: Hashable {
+    let recents: [RecentPlayback]
+    let albums: [AlbumSummary]
 }
 
 enum AppDestination: Hashable {

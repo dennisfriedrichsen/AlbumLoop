@@ -4,7 +4,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 
 - Pick an album with the Siri Remote and play every still photo in it, in album order or shuffled.
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
-- A **Recently Played** row on the home screen, like the TV app's Continue Watching: a slideshow you left part way through shows a progress bar and resumes at the same photo (in the same shuffle order). Hold Select on a card to start over or remove it.
+- A **Recently Played** row on the home screen, like the TV app's Continue Watching: a slideshow you left part way through shows a progress bar and resumes at the same photo (in the same shuffle order). Hold Select on a card to start over or remove it. The same albums appear in the Apple TV **Top Shelf** when Stillroom is in the Home screen's top row.
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
 > **Status:** the playback logic is covered by 49 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
@@ -109,7 +109,7 @@ You do **not** need a paid membership to run Stillroom on your own Apple TV.
 | How long an install keeps working | **7 days.** The provisioning profile expires; after that the app won't launch until you build and run again from Xcode. | 1 year (development profile) |
 | Limits | Up to 3 devices and 10 App IDs, both expiring after 7 days; up to 3 of your apps per device | 100 devices of each type per year |
 | TestFlight / App Store | No | Yes |
-| Capabilities this app needs | None beyond Photos permission, which needs no entitlement, so a free account works | Same |
+| Capabilities this app needs | Photos permission (no entitlement) and an **App Group** (`group.com.dennisfriedrichsen.Stillroom`) shared with the Top Shelf extension. Automatic signing creates the group; if you change the bundle identifier, change the group in `Config/*.entitlements` and `StillroomShared/TopShelfFeed.swift` to match | Same |
 
 Limits are from Apple's [membership comparison](https://developer.apple.com/support/compare-memberships/) page, checked 2026‑09‑22. With a free account, plan to reinstall from Xcode about once a week. The paid program mainly buys a 1‑year install and TestFlight, which lets the Apple TV install updates itself.
 
@@ -184,7 +184,10 @@ Stillroom.xcworkspace
 │   │   ├── ThumbnailLoader.swift       album covers (bounded in-memory NSCache)
 │   │   └── CloudProbe.swift            on-device "Test iCloud Loading"
 │   ├── Views/                    ④ presentation (grid, detail, slideshow, panels, diagnostics, About)
-│   └── Support/                  network monitor, display metrics, settings keys, DEBUG demo provider
+│   └── Support/                  network monitor, display metrics, settings keys, recents + Top Shelf feed, DEBUG demo provider
+├── TopShelf/                     Top Shelf extension: Recently Played on the Apple TV Home screen
+├── StillroomShared/              compiled into both targets: the App Group feed and stillroom:// links
+├── Config/                       Info.plist additions (URL scheme, extension point) and entitlements
 └── StillroomCore/                Swift package, no UIKit/PhotoKit, tested on macOS and tvOS
     ├── PlaybackSequence.swift    ③ the complete album order, shuffle permutations, history
     ├── ImageBuffer.swift         ② bounded rolling buffer: priorities, concurrency, memory, retries

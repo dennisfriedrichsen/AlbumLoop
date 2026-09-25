@@ -7,6 +7,7 @@ struct AlbumDetailView: View {
 
     @Environment(PhotoLibraryModel.self) private var library
     @Environment(RecentPlaybackStore.self) private var recents
+    @Environment(PlaybackRouter.self) private var router
     @AppStorage(SettingsKey.slideSeconds) private var slideSeconds = SettingsDefault.slideSeconds
     @AppStorage(SettingsKey.shuffle) private var shuffle = false
     @AppStorage(SettingsKey.loop) private var loop = true
@@ -14,7 +15,6 @@ struct AlbumDetailView: View {
     @AppStorage(SettingsKey.albumOrder) private var albumOrder = AlbumOrder.album
     @AppStorage(SettingsKey.showDiagnostics) private var showDiagnostics = false
     @AppStorage(SettingsKey.verticalStyle) private var verticalStyle = VerticalPhotoStyle.recommended
-    @State private var request: SlideshowRequest?
     @FocusState private var playFocused: Bool
 
     private var current: AlbumSummary {
@@ -33,7 +33,7 @@ struct AlbumDetailView: View {
                     .foregroundStyle(.secondary)
                 if let resume = recents.entry(for: current.id)?.resume {
                     Button {
-                        request = SlideshowRequest(album: current, resume: resume)
+                        router.request = SlideshowRequest(album: current, resume: resume)
                     } label: {
                         Label("Resume from Photo \((resume.position + 1).formatted())", systemImage: "play.fill")
                             .frame(minWidth: 420)
@@ -42,14 +42,14 @@ struct AlbumDetailView: View {
                     ResumeProgressBar(fraction: resume.fraction)
                         .frame(width: 420)
                     Button {
-                        request = SlideshowRequest(album: current, resume: nil)
+                        router.request = SlideshowRequest(album: current, resume: nil)
                     } label: {
                         Label("Start Over", systemImage: "arrow.counterclockwise")
                             .frame(minWidth: 420)
                     }
                 } else {
                     Button {
-                        request = SlideshowRequest(album: current, resume: nil)
+                        router.request = SlideshowRequest(album: current, resume: nil)
                     } label: {
                         Label("Play Slideshow", systemImage: "play.fill")
                             .frame(minWidth: 420)
@@ -99,9 +99,6 @@ struct AlbumDetailView: View {
         }
         .padding(60)
         .defaultFocus($playFocused, true)
-        .fullScreenCover(item: $request) { request in
-            SlideshowLaunch(album: request.album, resume: request.resume)
-        }
     }
 
     private func styleLabel(_ style: VerticalPhotoStyle) -> String {

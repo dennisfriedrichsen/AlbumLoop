@@ -8,16 +8,52 @@
 
 /* Begin PBXBuildFile section */
 		0A0000000000000000000012 /* StillroomCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0A0000000000000000000011 /* StillroomCore */; };
+		0A0000000000000000000029 /* TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0A0000000000000000000021 /* TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0A000000000000000000002A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0A0000000000000000000024;
+			remoteInfo = TopShelf;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0A000000000000000000002C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0A0000000000000000000029 /* TopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0A0000000000000000000004 /* Stillroom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Stillroom.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0A0000000000000000000021 /* TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0A0000000000000000000005 /* Stillroom */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Stillroom;
+			sourceTree = "<group>";
+		};
+		0A0000000000000000000022 /* TopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TopShelf;
+			sourceTree = "<group>";
+		};
+		0A0000000000000000000023 /* StillroomShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StillroomShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -31,6 +67,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0A0000000000000000000026 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -38,6 +81,8 @@
 			isa = PBXGroup;
 			children = (
 				0A0000000000000000000005 /* Stillroom */,
+				0A0000000000000000000022 /* TopShelf */,
+				0A0000000000000000000023 /* StillroomShared */,
 				0A0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -46,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				0A0000000000000000000004 /* Stillroom.app */,
+				0A0000000000000000000021 /* TopShelf.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -60,13 +106,16 @@
 				0A0000000000000000000007 /* Sources */,
 				0A0000000000000000000008 /* Frameworks */,
 				0A0000000000000000000009 /* Resources */,
+				0A000000000000000000002C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0A000000000000000000002B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0A0000000000000000000005 /* Stillroom */,
+				0A0000000000000000000023 /* StillroomShared */,
 			);
 			name = Stillroom;
 			packageProductDependencies = (
@@ -75,6 +124,27 @@
 			productName = Stillroom;
 			productReference = 0A0000000000000000000004 /* Stillroom.app */;
 			productType = "com.apple.product-type.application";
+		};
+		0A0000000000000000000024 /* TopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A0000000000000000000028 /* Build configuration list for PBXNativeTarget "TopShelf" */;
+			buildPhases = (
+				0A0000000000000000000025 /* Sources */,
+				0A0000000000000000000026 /* Frameworks */,
+				0A0000000000000000000027 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0A0000000000000000000022 /* TopShelf */,
+				0A0000000000000000000023 /* StillroomShared */,
+			);
+			name = TopShelf;
+			productName = TopShelf;
+			productReference = 0A0000000000000000000021 /* TopShelf.appex */;
+			productType = "com.apple.product-type.tv-app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -87,6 +157,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					0A0000000000000000000006 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					0A0000000000000000000024 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -109,12 +182,20 @@
 			projectRoot = "";
 			targets = (
 				0A0000000000000000000006 /* Stillroom */,
+				0A0000000000000000000024 /* TopShelf */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0A0000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0A0000000000000000000027 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -131,7 +212,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0A0000000000000000000025 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0A000000000000000000002B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0A0000000000000000000024 /* TopShelf */;
+			targetProxy = 0A000000000000000000002A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0A000000000000000000000C /* Debug */ = {
@@ -254,11 +350,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/Stillroom.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T5MRHCWRRV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Stillroom-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Stillroom;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Stillroom reads your Photos albums to play slideshows, including photos stored only in iCloud. Photos are kept in memory only while needed and are never copied or shared.";
@@ -283,11 +381,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/Stillroom.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T5MRHCWRRV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Stillroom-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Stillroom;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Stillroom reads your Photos albums to play slideshows, including photos stored only in iCloud. Photos are kept in memory only while needed and are never copied or shared.";
@@ -300,6 +400,60 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+			};
+			name = Release;
+		};
+		0A000000000000000000002D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/TopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T5MRHCWRRV;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/TopShelf-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Stillroom Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom.TopShelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+			};
+			name = Debug;
+		};
+		0A000000000000000000002E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/TopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T5MRHCWRRV;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/TopShelf-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Stillroom Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom.TopShelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
@@ -324,6 +478,15 @@
 			buildConfigurations = (
 				0A000000000000000000000E /* Debug */,
 				0A000000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0A0000000000000000000028 /* Build configuration list for PBXNativeTarget "TopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A000000000000000000002D /* Debug */,
+				0A000000000000000000002E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
