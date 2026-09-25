@@ -118,6 +118,16 @@ Use an album with many vertical photos. Turn on the diagnostics overlay. For eac
 - [ ] **12.6** **Black Bars:** unchanged from before.
 - [ ] **12.7** Which style do you prefer on this Apple TV? ______
 
+## 13. Recently Played across Apple TVs
+
+Needs two Apple TVs signed in to the same Apple Account with iCloud Photos on, both on tvOS 18.2 or later, both running this build. Photos gives albums and photos different identifiers on each device; Stillroom syncs Photos *cloud* identifiers and converts them back, which Apple documents for iCloud Photos items but which hasn't been checked for albums across devices yet.
+
+- [ ] **13.1** On TV A, play an album to about photo 20 and press the TV button (leaving the app sends the resume point). On TV B, open Stillroom within a minute or two: the album appears first in Recently Played with the same "Photo 20 of N" and progress bar. Time until it appeared: ______
+- [ ] **13.2** Select it on TV B: it resumes at the same photo. Repeat with Shuffle on: the next photos match what TV A would have shown.
+- [ ] **13.3** Remove an album from Recently Played on TV B; within a minute or two it is gone on TV A too, and doesn't come back after relaunching either app.
+- [ ] **13.4** TV B's Top Shelf shows the synced albums after Stillroom has been opened on it once.
+- [ ] **13.5** If an album doesn't appear on TV B, copy both logs off (see README) and look for "iCloud:" lines, especially "cloud identifiers not in this library".
+
 ## Sign-off
 
 | Area | Result | Notes |
@@ -131,3 +141,4 @@ Use an album with many vertical photos. Turn on the diagnostics overlay. For eac
 | Lifecycle (9) | | |
 | Album edits (10) | | |
 | Vertical photos (12) | | |
+| Recently Played sync (13) | | |

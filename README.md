@@ -4,7 +4,7 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 
 - Pick an album with the Siri Remote and play every still photo in it, in album order or shuffled.
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
-- A **Recently Played** row on the home screen, like the TV app's Continue Watching: a slideshow you left part way through shows a progress bar and resumes at the same photo (in the same shuffle order). Hold Select on a card to start over or remove it. The same albums appear in the Apple TV **Top Shelf** when Stillroom is in the Home screen's top row.
+- A **Recently Played** row on the home screen, like the TV app's Continue Watching: a slideshow you left part way through shows a progress bar and resumes at the same photo (in the same shuffle order). Hold Select on a card to start over or remove it. The same albums appear in the Apple TV **Top Shelf** when Stillroom is in the Home screen's top row, and the list **syncs through iCloud** to other Apple TVs on the same Apple Account (tvOS 18.2 or later), so you can stop in one room and continue in another. *Not yet verified across two Apple TVs; see checklist section 13.*
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
 > **Status:** the playback logic is covered by 49 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
@@ -109,7 +109,7 @@ You do **not** need a paid membership to run Stillroom on your own Apple TV.
 | How long an install keeps working | **7 days.** The provisioning profile expires; after that the app won't launch until you build and run again from Xcode. | 1 year (development profile) |
 | Limits | Up to 3 devices and 10 App IDs, both expiring after 7 days; up to 3 of your apps per device | 100 devices of each type per year |
 | TestFlight / App Store | No | Yes |
-| Capabilities this app needs | Photos permission (no entitlement) and an **App Group** (`group.com.dennisfriedrichsen.Stillroom`) shared with the Top Shelf extension. Automatic signing creates the group; if you change the bundle identifier, change the group in `Config/*.entitlements` and `StillroomShared/TopShelfFeed.swift` to match | Same |
+| Capabilities this app needs | Photos permission (no entitlement) an **App Group** (`group.com.dennisfriedrichsen.Stillroom`) shared with the Top Shelf extension, and **iCloud key-value storage** for syncing Recently Played between Apple TVs. Automatic signing creates the group; if you change the bundle identifier, change the group in `Config/*.entitlements` and `StillroomShared/TopShelfFeed.swift` to match | Same |
 
 Limits are from Apple's [membership comparison](https://developer.apple.com/support/compare-memberships/) page, checked 2026‑09‑22. With a free account, plan to reinstall from Xcode about once a week. The paid program mainly buys a 1‑year install and TestFlight, which lets the Apple TV install updates itself.
 
@@ -177,7 +177,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 Stillroom.xcworkspace
 ├── Stillroom/                    tvOS app target (SwiftUI + PhotoKit + a little UIKit)
 │   ├── App/StillroomApp.swift
-│   ├── Photos/                   ① authorization + album access, ② PhotoKit image loading
+│   ├── Photos/                   ① authorization + album access, ② PhotoKit image loading, iCloud sync of Recently Played
 │   │   ├── PhotoLibraryModel.swift    authorization, availability, albums, snapshots, change observer
 │   │   ├── PhotoKitRequest.swift      callback → async bridge (degraded/final, cancel, exactly-once)
 │   │   ├── PhotoKitImageProvider.swift  iCloud download, error mapping, screen-sized decode

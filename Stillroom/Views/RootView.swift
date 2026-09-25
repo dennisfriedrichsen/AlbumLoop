@@ -9,6 +9,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Album from a Top Shelf link, held until the album list has loaded.
     @State private var pendingAlbumID: String?
+    @State private var sync = RecentsSync()
 
     var body: some View {
         #if DEBUG
@@ -46,6 +47,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             // The user may have changed permission in Settings while away.
             if phase == .active { library.refreshAccess() }
+            if phase == .background { syncBeforeSuspending() }
         }
         .fullScreenCover(item: $router.request) { request in
             SlideshowLaunch(album: request.album, resume: request.resume)
@@ -54,13 +56,29 @@ struct RootView: View {
             pendingAlbumID = TopShelfFeed.albumID(from: url)
             openPendingAlbum()
         }
-        .onChange(of: library.hasLoadedAlbums) { openPendingAlbum() }
+        .onChange(of: library.hasLoadedAlbums, initial: true) {
+            openPendingAlbum()
+            if library.hasLoadedAlbums { sync.start(recents: recents, library: library) }
+        }
+        .onChange(of: recents.items) { sync.scheduleSync() }
+        .onChange(of: recents.removed) { sync.scheduleSync() }
         .task(id: TopShelfInputs(recents: recents.items, albums: library.albums)) {
             // Coalesce the saves made on every slide change.
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             StillroomLog.library.info("Top Shelf: updating from \(recents.items.count) recent albums")
             await TopShelfPublisher.publish(recents: recents.items, library: library)
+        }
+    }
+
+    /// Sends the latest resume point to iCloud when the user leaves, so another
+    /// Apple TV can pick up here. Asks for a little background time to finish.
+    private func syncBeforeSuspending() {
+        let task = UIApplication.shared.beginBackgroundTask(withName: "Recently Played sync")
+        sync.syncNow()
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            UIApplication.shared.endBackgroundTask(task)
         }
     }
 

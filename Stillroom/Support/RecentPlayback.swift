@@ -39,8 +39,11 @@ extension AlbumOrder: Codable {}
 final class RecentPlaybackStore {
     static let maxCount = 12
     private static let defaultsKey = "recentPlayback"
+    private static let removedKey = "recentPlaybackRemoved"
 
     private(set) var items: [RecentPlayback] = []
+    /// Album ID → when it was removed here, so the removal can sync to other Apple TVs.
+    private(set) var removed: [String: Date] = [:]
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -48,6 +51,10 @@ final class RecentPlaybackStore {
         if let data = defaults.data(forKey: Self.defaultsKey),
            let decoded = try? JSONDecoder().decode([RecentPlayback].self, from: data) {
             items = decoded
+        }
+        if let data = defaults.data(forKey: Self.removedKey),
+           let decoded = try? JSONDecoder().decode([String: Date].self, from: data) {
+            removed = decoded
         }
     }
 
@@ -57,6 +64,7 @@ final class RecentPlaybackStore {
 
     /// Moves the album to the front and records where it is now.
     func record(albumID: String, resume: ResumePoint?) {
+        removed[albumID] = nil
         items.removeAll { $0.albumID == albumID }
         items.insert(RecentPlayback(albumID: albumID, lastPlayed: .now, resume: resume), at: 0)
         if items.count > Self.maxCount {
@@ -67,12 +75,24 @@ final class RecentPlaybackStore {
 
     func remove(albumID: String) {
         items.removeAll { $0.albumID == albumID }
+        removed[albumID] = .now
+        save()
+    }
+
+    /// Replaces everything with the result of an iCloud sync.
+    func replace(items newItems: [RecentPlayback], removed newRemoved: [String: Date]) {
+        guard newItems != items || newRemoved != removed else { return }
+        items = Array(newItems.prefix(Self.maxCount))
+        removed = newRemoved
         save()
     }
 
     private func save() {
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: Self.defaultsKey)
+        }
+        if let data = try? JSONEncoder().encode(removed) {
+            defaults.set(data, forKey: Self.removedKey)
         }
     }
 }
