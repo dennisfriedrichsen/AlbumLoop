@@ -1,4 +1,4 @@
-# AlbumLoop
+# Stillroom
 
 A native Apple TV app that plays **complete** slideshows of ordinary iCloud Photos albums, including photos that aren't stored on the Apple TV, using only public PhotoKit APIs.
 
@@ -36,7 +36,7 @@ Sources checked on 2026‑09‑22: the tvOS 27.0 SDK headers in Xcode 27.0 (`Pho
 4. Download times and memory behaviour on your specific hardware and network.
 5. The Settings paths quoted in the app's permission messages.
 
-On the built-in slideshow looping over its first ~10 photos: that behaviour is consistent with a player that treats the locally cached subset as the whole album, but it is **not confirmed**. AlbumLoop is designed so that failure mode can't happen, whatever the cause.
+On the built-in slideshow looping over its first ~10 photos: that behaviour is consistent with a player that treats the locally cached subset as the whole album, but it is **not confirmed**. Stillroom is designed so that failure mode can't happen, whatever the cause.
 
 ---
 
@@ -51,19 +51,19 @@ On the built-in slideshow looping over its first ~10 photos: that behaviour is c
 
 **Why tvOS 18:** PhotoKit's required pieces need only tvOS 14 or earlier. The deployment target is set by the app's own code: the Observation framework (`@Observable`, tvOS 17), `Synchronization.Mutex` (tvOS 18), and current SwiftUI focus and command APIs. tvOS 18 runs on every Apple TV that can run tvOS 17, so raising the target costs no hardware, and it matches the iOS 18 baseline used across these projects.
 
-**Older Apple TVs:** tvOS 27 dropped the Apple TV HD and the **Apple TV 4K (1st generation, model A1842)**, so tvOS 26 is the last version they run. Because the minimum is tvOS 18, AlbumLoop runs on tvOS 26 with no changes; the deployment target is a minimum, not the version you build with. Building with the tvOS 27 SDK in Xcode 27 still installs on a tvOS 26 device. Don't raise the deployment target above 26 while you use one of these models. To check your model, see Settings › General › About, and compare the model number with Apple's [Identify your Apple TV model](https://support.apple.com/en-us/101605).
+**Older Apple TVs:** tvOS 27 dropped the Apple TV HD and the **Apple TV 4K (1st generation, model A1842)**, so tvOS 26 is the last version they run. Because the minimum is tvOS 18, Stillroom runs on tvOS 26 with no changes; the deployment target is a minimum, not the version you build with. Building with the tvOS 27 SDK in Xcode 27 still installs on a tvOS 26 device. Don't raise the deployment target above 26 while you use one of these models. To check your model, see Settings › General › About, and compare the model number with Apple's [Identify your Apple TV model](https://support.apple.com/en-us/101605).
 
 ---
 
 ## Build
 
 ```bash
-git clone https://github.com/dennisfriedrichsen/AlbumLoop ~/src/github/dennisfriedrichsen/AlbumLoop
-cd ~/src/github/dennisfriedrichsen/AlbumLoop
-open AlbumLoop.xcworkspace
+git clone <repository-url> ~/src/github/dennisfriedrichsen/Stillroom
+cd ~/src/github/dennisfriedrichsen/Stillroom
+open Stillroom.xcworkspace
 ```
 
-Open the **workspace**, not the `.xcodeproj`. The workspace includes the local `AlbumLoopCore` package, so ⌘U runs its tests from the `AlbumLoop` scheme.
+Open the **workspace**, not the `.xcodeproj`. The workspace includes the local `StillroomCore` package, so ⌘U runs its tests from the `Stillroom` scheme.
 
 The app has no third-party dependencies.
 
@@ -77,17 +77,17 @@ Command-line equivalents:
 
 ```bash
 # Playback-logic tests on the Mac (fastest)
-cd AlbumLoopCore && swift test
+cd StillroomCore && swift test
 ```
 
 ```bash
 # Same tests on the tvOS Simulator
-xcodebuild -workspace AlbumLoop.xcworkspace -scheme AlbumLoop -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' test
+xcodebuild -workspace Stillroom.xcworkspace -scheme Stillroom -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' test
 ```
 
 ```bash
 # Compile for a real Apple TV without signing (checks the device SDK)
-xcodebuild -workspace AlbumLoop.xcworkspace -scheme AlbumLoop -destination 'generic/platform=tvOS' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -workspace Stillroom.xcworkspace -scheme Stillroom -destination 'generic/platform=tvOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 ### Simulator demo mode (Debug builds only)
@@ -100,7 +100,7 @@ The tvOS Simulator has no iCloud Photos library. To check the slideshow screens,
 
 ### 1. Choose how to sign
 
-You do **not** need a paid membership to run AlbumLoop on your own Apple TV.
+You do **not** need a paid membership to run Stillroom on your own Apple TV.
 
 | | Free Apple Account ("Personal Team") | Apple Developer Program ($99/year) |
 |---|---|---|
@@ -115,9 +115,9 @@ Limits are from Apple's [membership comparison](https://developer.apple.com/supp
 ### 2. Set up signing in Xcode
 
 1. Xcode › Settings › Accounts › **+** › Apple Account, and sign in. A free account appears as "*Your Name* (Personal Team)."
-2. In the project navigator select **AlbumLoop** › target **AlbumLoop** › **Signing & Capabilities**.
+2. In the project navigator select **Stillroom** › target **Stillroom** › **Signing & Capabilities**.
 3. Keep **Automatically manage signing** on, and choose your team.
-4. If Xcode says the bundle identifier `com.dennisfriedrichsen.AlbumLoop` is unavailable, change it to something unique, such as `com.<yourname>.AlbumLoop`.
+4. If Xcode says the bundle identifier `com.dennisfriedrichsen.Stillroom` is unavailable, change it to something unique, such as `com.<yourname>.Stillroom`.
 
 ### 3. Pair the Apple TV with Xcode (one time)
 
@@ -130,10 +130,10 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 ### 4. Run
 
-1. In the Xcode toolbar choose the **AlbumLoop** scheme and your Apple TV as the destination.
+1. In the Xcode toolbar choose the **Stillroom** scheme and your Apple TV as the destination.
 2. Press ⌘R. The first install to a new device can take a while.
-3. On first launch AlbumLoop explains why it needs Photos access. Choose **Continue**, then choose **Allow access to all Photos**. The tvOS 26 prompt also offers a **Select** (limited access) option; with that, AlbumLoop sees only the photos you picked, so albums would look incomplete.
-4. After that, AlbumLoop appears on the Home screen and you can launch it without Xcode, until the profile expires (7 days with a free account).
+3. On first launch Stillroom explains why it needs Photos access. Choose **Continue**, then choose **Allow access to all Photos**. The tvOS 26 prompt also offers a **Select** (limited access) option; with that, Stillroom sees only the photos you picked, so albums would look incomplete.
+4. After that, Stillroom appears on the Home screen and you can launch it without Xcode, until the profile expires (7 days with a free account).
 
 **Troubleshooting**
 - *"Untrusted developer" or the app won't open:* rebuild and run from Xcode; free-account profiles expire after 7 days.
@@ -142,7 +142,7 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 
 ---
 
-## Using AlbumLoop
+## Using Stillroom
 
 - **Albums screen:** albums are arranged in the same folders as in Photos. Folders and albums appear in the same custom order as in Photos (PhotoKit's unsorted order; Apple doesn't document that it matches Photos, but it did on an Apple TV HD with tvOS 26.6 on 2026‑09‑24). A folder card shows how many albums it contains (subfolders included) and opens its own grid. Empty folders, and folders holding only Shared Albums, are hidden. Each album card shows the album name, cover, and number of eligible still photos. Albums appear immediately; counts and covers fill in over a few seconds ("counting photos…"), which took about 9 s for 157 albums on an Apple TV HD. The cover is the album's key photo from Photos. Key photos are slow to look up on older Apple TVs (20–34 s for 157 albums on an Apple TV HD), so the first photo stands in until the key photo arrives in the background; key photos are saved between launches, so after the first run covers are right immediately. The lookup pauses during a slideshow. Live Photos count and are shown as stills; videos are excluded from the count and the slideshow.
 - **Album screen:** Play, plus options (saved between launches): Shuffle, Order, Loop, Slide Duration (default 8 s), Vertical Photos, the "Photo 12 of 600" counter, and the diagnostics overlay.
@@ -166,16 +166,16 @@ Apple TV 4K has no USB port, so pairing happens over the network. tvOS has **no 
 | Click, or Up/Down | Show controls (Previous, Play/Pause, Next, Loop, Counter, Exit) |
 | Back / Menu | Hide the controls, or exit the slideshow |
 
-- **If a photo can't load:** the current photo stays on screen with a small "Loading…" or "retrying…" note. After automatic retries fail, AlbumLoop stops and offers **Retry**, **Skip Photo**, or **Exit**. Skipped photos are listed in the summary at the end of the cycle.
+- **If a photo can't load:** the current photo stays on screen with a small "Loading…" or "retrying…" note. After automatic retries fail, Stillroom stops and offers **Retry**, **Skip Photo**, or **Exit**. Skipped photos are listed in the summary at the end of the cycle.
 
 ---
 
 ## Architecture
 
 ```
-AlbumLoop.xcworkspace
-├── AlbumLoop/                    tvOS app target (SwiftUI + PhotoKit + a little UIKit)
-│   ├── App/AlbumLoopApp.swift
+Stillroom.xcworkspace
+├── Stillroom/                    tvOS app target (SwiftUI + PhotoKit + a little UIKit)
+│   ├── App/StillroomApp.swift
 │   ├── Photos/                   ① authorization + album access, ② PhotoKit image loading
 │   │   ├── PhotoLibraryModel.swift    authorization, availability, albums, snapshots, change observer
 │   │   ├── PhotoKitRequest.swift      callback → async bridge (degraded/final, cancel, exactly-once)
@@ -184,7 +184,7 @@ AlbumLoop.xcworkspace
 │   │   └── CloudProbe.swift            on-device "Test iCloud Loading"
 │   ├── Views/                    ④ presentation (grid, detail, slideshow, panels, diagnostics, About)
 │   └── Support/                  network monitor, display metrics, settings keys, DEBUG demo provider
-└── AlbumLoopCore/                Swift package, no UIKit/PhotoKit, tested on macOS and tvOS
+└── StillroomCore/                Swift package, no UIKit/PhotoKit, tested on macOS and tvOS
     ├── PlaybackSequence.swift    ③ the complete album order, shuffle permutations, history
     ├── ImageBuffer.swift         ② bounded rolling buffer: priorities, concurrency, memory, retries
     ├── SlideshowController.swift ③ explicit playback state machine
@@ -270,11 +270,11 @@ Swift concurrency runs `async` code on a thread pool with one thread per CPU cor
 ### Diagnostics and privacy
 
 - **Diagnostics overlay** (turn on in album settings): session, cycle, position, eligible album count, displayed / buffered / loading / pending / failed / skipped / removed counts, decoded memory versus budget, retries, stale callbacks, network state, and the last few requests with attempt number, duration, and outcome.
-- **Logging:** `os.Logger`, subsystem `com.dennisfriedrichsen.AlbumLoop`, categories `library`, `loading`, and `playback`. Asset identifiers are logged only as short one-way hashes; image contents are never logged. Nothing leaves the device. To stream logs from a paired Apple TV, use Console.app and filter on that subsystem.
-- **On-device log file:** the same info-level messages (launch with app version, model and tvOS version; each request, load time and failure; each wait, display, stall, pause and navigation) are also written to `Library/Caches/Diagnostics/albumloop.log` in the app's container. It rotates at 400 KB (one previous file is kept), lives in purgeable Caches, and is never uploaded. After a problem, copy it off the paired Apple TV without restarting the app:
+- **Logging:** `os.Logger`, subsystem `com.dennisfriedrichsen.Stillroom`, categories `library`, `loading`, and `playback`. Asset identifiers are logged only as short one-way hashes; image contents are never logged. Nothing leaves the device. To stream logs from a paired Apple TV, use Console.app and filter on that subsystem.
+- **On-device log file:** the same info-level messages (launch with app version, model and tvOS version; each request, load time and failure; each wait, display, stall, pause and navigation) are also written to `Library/Caches/Diagnostics/stillroom.log` in the app's container. It rotates at 400 KB (one previous file is kept), lives in purgeable Caches, and is never uploaded. After a problem, copy it off the paired Apple TV without restarting the app:
 
 ```bash
-xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDataContainer --domain-identifier com.dennisfriedrichsen.AlbumLoop --source Library/Caches/Diagnostics/albumloop.log --destination ./albumloop.log
+xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDataContainer --domain-identifier com.dennisfriedrichsen.Stillroom --source Library/Caches/Diagnostics/stillroom.log --destination ./stillroom.log
 ```
 
 - **Loading indicator:** after 10 seconds of waiting, the "Loading…" or "retrying…" text also shows the elapsed time and the attempt number (for example "15 s · attempt 3 of 4"), so a slow download is distinguishable from a stuck one.
@@ -283,7 +283,7 @@ xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDat
 
 ## Tests
 
-`AlbumLoopCore/Tests` — 45 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
+`StillroomCore/Tests` — 45 tests (Swift Testing) with a `FakeImageProvider` whose requests stay pending until the test completes, fails, or cancels them, and a `ManualScheduler` that makes time deterministic.
 
 | Requirement | Tests |
 |---|---|

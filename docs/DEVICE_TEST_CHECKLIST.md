@@ -9,7 +9,7 @@ Record each result as ✅ / ❌ / ⚠️ with notes, and keep the filled-in copy
 | Date | |
 | Apple TV model and storage | (e.g. Apple TV 4K 3rd gen, 32 GB) |
 | tvOS version | |
-| AlbumLoop version (build) | (About screen) |
+| Stillroom version (build) | (About screen) |
 | Network | (Wi‑Fi / Ethernet, approximate speed) |
 | Library size and iCloud Photos setting on the Apple TV | |
 | Test album name, photo count in Photos, number of videos | |
@@ -18,7 +18,7 @@ Record each result as ✅ / ❌ / ⚠️ with notes, and keep the filled-in copy
 
 - [ ] **0.1** Apple TV: Settings › Users and Accounts › *you* › iCloud › **iCloud Photos is on**. Note how long ago it was turned on.
 - [ ] **0.2** Apple TV storage: Settings › General › Storage (or equivalent). Note the free space before testing: ______
-- [ ] **0.3** Install AlbumLoop from Xcode (see README). On the Mac, open Console.app, select the Apple TV, filter on `subsystem:com.dennisfriedrichsen.AlbumLoop`, and start streaming.
+- [ ] **0.3** Install Stillroom from Xcode (see README). On the Mac, open Console.app, select the Apple TV, filter on `subsystem:com.dennisfriedrichsen.Stillroom`, and start streaming.
 - [ ] **0.4** Pick a **large test album** (ideally several hundred photos) that includes photos you haven't viewed on the Apple TV recently, so they're likely to be cloud-only. Note its photo count as shown in Photos on iPhone or Mac, and how many of its items are videos.
 
 ## 1. Permissions and states
@@ -92,7 +92,7 @@ Settings: Shuffle on, Loop on, 3‑second slides.
 
 - [ ] **9.1** Press Back mid-slideshow → the album screen. Console shows no further "Request" lines for that session (requests are cancelled).
 - [ ] **9.2** Start a *different* album right away. It starts at Photo 1 of its own count, and no photo from the previous album appears.
-- [ ] **9.3** Press the TV/Home button mid-slideshow, wait 1 minute, and reopen AlbumLoop. The slideshow is at the same position and resumes if it was playing.
+- [ ] **9.3** Press the TV/Home button mid-slideshow, wait 1 minute, and reopen Stillroom. The slideshow is at the same position and resumes if it was playing.
 - [ ] **9.4** Screen saver: while playing, the screen saver never starts (leave it playing past your screen-saver delay). Pause, and the screen saver starts after the normal delay. Exit the slideshow, and normal behaviour continues.
 - [ ] **9.5** Run the album for 30+ minutes with diagnostics on. Memory stays within budget, and the app isn't terminated.
 

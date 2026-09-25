@@ -7,7 +7,7 @@ let sourceURL = root.appendingPathComponent("design/app-icon-options/stillroom-b
 guard let source = NSImage(contentsOf: sourceURL) else {
     fatalError("Cannot load approved icon: \(sourceURL.path)")
 }
-let assets = root.appendingPathComponent("AlbumLoop/Assets.xcassets/App Icon & Top Shelf Image.brandassets")
+let assets = root.appendingPathComponent("Stillroom/Assets.xcassets/App Icon & Top Shelf Image.brandassets")
 let exports = [("App Icon.imagestack", 400, 240),
                ("App Icon.imagestack", 800, 480),
                ("App Icon - App Store.imagestack", 1280, 768)]
