@@ -137,13 +137,6 @@ struct FolderCard: View {
             AlbumThumbnail(assetID: albums.lazy.compactMap(\.keyAssetID).first)
                 .frame(height: 230)
                 .clipped()
-                .overlay(alignment: .topLeading) {
-                    Image(systemName: "folder.fill")
-                        .font(.title2)
-                        .padding(12)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                        .padding(16)
-                }
             VStack(alignment: .leading, spacing: 6) {
                 Text(folder.title)
                     .font(.headline)
