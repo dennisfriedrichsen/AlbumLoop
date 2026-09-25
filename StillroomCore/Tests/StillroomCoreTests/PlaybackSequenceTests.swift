@@ -101,4 +101,32 @@ struct PlaybackSequenceTests {
         #expect(rebuilt.count == 5)
         #expect(rebuilt.position == 0)
     }
+
+    @Test("Seeking resumes on the slide containing a photo, including in a reproduced shuffle")
+    func seekResumes() {
+        let items = ids(50)
+        var sequence = PlaybackSequence(items: items, order: .shuffled, loops: true, seed: 9)
+        for _ in 0..<20 { _ = sequence.advance() }
+        let target = sequence.currentID
+        let position = sequence.position
+
+        var resumed = PlaybackSequence(items: items, order: .shuffled, loops: true, seed: 9)
+        let found = resumed.seek(to: target)
+        #expect(found)
+        #expect(resumed.position == position)
+        #expect(resumed.currentCycleIDs == sequence.currentCycleIDs)
+        #expect(resumed.passedIDs == Array(sequence.currentCycleIDs.prefix(position)))
+        let missing = resumed.seek(to: AssetID("missing"))
+        #expect(!missing)
+        #expect(resumed.position == position)
+    }
+
+    @Test("Seeking to the second photo of a pair lands on the pair")
+    func seekIntoPair() {
+        let items = ids(4)
+        var sequence = PlaybackSequence(items: items, order: .sequential, loops: true, seed: 1, pairable: [items[1], items[2]])
+        let found = sequence.seek(to: items[2])
+        #expect(found)
+        #expect(sequence.currentIDs == [items[1], items[2]])
+    }
 }

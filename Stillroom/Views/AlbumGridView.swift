@@ -6,7 +6,9 @@ struct AlbumGridView: View {
     var folderID: String?
 
     @Environment(PhotoLibraryModel.self) private var library
+    @Environment(RecentPlaybackStore.self) private var recents
     @AppStorage(SettingsKey.showDiagnostics) private var showDiagnostics = false
+    @State private var request: SlideshowRequest?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 48), count: 4)
 
@@ -41,6 +43,9 @@ struct AlbumGridView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 40) {
+                        if folderID == nil, !recentAlbums.isEmpty {
+                            recentlyPlayed
+                        }
                         header
                         LazyVGrid(columns: columns, spacing: 60) {
                             ForEach(items) { item in
@@ -73,6 +78,51 @@ struct AlbumGridView: View {
                 await library.loadAlbums()
             }
         }
+        .fullScreenCover(item: $request) { request in
+            SlideshowLaunch(album: request.album, resume: request.resume)
+        }
+    }
+
+    /// Recently played albums still in the library, newest first.
+    private var recentAlbums: [(album: AlbumSummary, entry: RecentPlayback)] {
+        recents.items.compactMap { entry in
+            guard let album = library.album(id: entry.albumID), album.photoCount != 0 else { return nil }
+            return (album, entry)
+        }
+    }
+
+    /// Like the TV app's Continue Watching: selecting a card picks the
+    /// slideshow up where it was left; hold Select for more options.
+    private var recentlyPlayed: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Recently Played")
+                .font(.title3.bold())
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 48) {
+                    ForEach(recentAlbums, id: \.album.id) { item in
+                        Button {
+                            request = SlideshowRequest(album: item.album, resume: item.entry.resume)
+                        } label: {
+                            RecentAlbumCard(album: item.album, resume: item.entry.resume)
+                        }
+                        .buttonStyle(.card)
+                        .contextMenu {
+                            if item.entry.resume != nil {
+                                Button("Start Over", systemImage: "arrow.counterclockwise") {
+                                    request = SlideshowRequest(album: item.album, resume: nil)
+                                }
+                            }
+                            Button("Remove from Recently Played", systemImage: "minus.circle", role: .destructive) {
+                                recents.remove(albumID: item.album.id)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 20)
+            }
+            .scrollClipDisabled()
+        }
+        .focusSection()
     }
 
     private var header: some View {
@@ -181,6 +231,63 @@ struct AlbumCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Wide card for the Recently Played row, with a progress bar when the
+/// slideshow was left part way through.
+struct RecentAlbumCard: View {
+    let album: AlbumSummary
+    let resume: ResumePoint?
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            AlbumThumbnail(assetID: album.keyAssetID)
+                .frame(width: 640, height: 360)
+                .clipped()
+            LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 14) {
+                Text(album.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let resume {
+                    Text("Photo \((resume.position + 1).formatted()) of \(resume.total.formatted())")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ResumeProgressBar(fraction: resume.fraction)
+                } else {
+                    Text(photoCountText(album.photoCount))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(28)
+        }
+        .frame(width: 640, height: 360)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        guard let resume else { return album.title }
+        return "\(album.title), resume from photo \(resume.position + 1) of \(resume.total)"
+    }
+}
+
+/// Thin capsule progress bar, as on the TV app's Continue Watching row.
+struct ResumeProgressBar: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.3))
+                Capsule().fill(.white)
+                    .frame(width: max(8, proxy.size.width * fraction))
+            }
+        }
+        .frame(height: 8)
     }
 }
 

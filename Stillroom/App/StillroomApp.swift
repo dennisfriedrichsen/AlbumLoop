@@ -5,6 +5,7 @@ import UIKit
 @main
 struct StillroomApp: App {
     @State private var library = PhotoLibraryModel()
+    @State private var recents = RecentPlaybackStore()
 
     init() {
         // Local-only diagnostics log in Caches (purgeable, never uploaded). Copy it off with:
@@ -21,6 +22,7 @@ struct StillroomApp: App {
         WindowGroup {
             RootView()
                 .environment(library)
+                .environment(recents)
                 .preferredColorScheme(.dark)
         }
     }

@@ -4,9 +4,10 @@ A native Apple TV app that plays **complete** slideshows of ordinary iCloud Phot
 
 - Pick an album with the Siri Remote and play every still photo in it, in album order or shuffled.
 - Photos load a few at a time from iCloud while you watch. The playback sequence is always the whole album, never "whatever happens to be downloaded."
+- A **Recently Played** row on the home screen, like the TV app's Continue Watching: a slideshow you left part way through shows a progress bar and resumes at the same photo (in the same shuffle order). Hold Select on a card to start over or remove it.
 - Nothing is exported, mirrored, or saved by the app, and no Mac or iPhone needs to stay on.
 
-> **Status:** the playback logic is covered by 45 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
+> **Status:** the playback logic is covered by 49 automated tests using a fake image provider. On a physical Apple TV HD (tvOS 26.6), album listing works, photos stored only in iCloud download through public PhotoKit, and **a full 392-photo album played through with every photo downloaded and displayed**. Network loss, shuffle cycles, long runs, and the new vertical-photo styles have not been verified on the device yet. See [Verification status](#verification-status) and the [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 
 ---
 
@@ -308,8 +309,8 @@ The PhotoKit layer (`PhotoKitRequest`, `PhotoKitImageProvider`, `PhotoLibraryMod
 
 | Check | Where | Result |
 |---|---|---|
-| Core logic tests (45) | macOS, `swift test` | ✅ Pass (repeated runs) |
-| Core logic tests (45) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
+| Core logic tests (49) | macOS, `swift test` | ✅ Pass (repeated runs) |
+| Core logic tests (49) | tvOS 27.0 Simulator, `xcodebuild test` (34 earlier also on tvOS 26.5) | ✅ Pass |
 | App compiles, Swift 6 language mode | tvOS Simulator SDK and **device** SDK (unsigned) | ✅ Builds with no Swift warnings |
 | Welcome screen and empty-library state | tvOS Simulator (Photos permission granted with `simctl`) | ✅ Rendered |
 | Slideshow UI: letterboxing, counter, diagnostics, "retrying…" indicator, stall panel with focus on Retry | tvOS 27.0 Simulator, `-demoSlideshow` (synthetic images) | ✅ Seen in screenshots |

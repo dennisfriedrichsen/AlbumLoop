@@ -130,6 +130,24 @@ public struct PlaybackSequence: Sendable {
         return .wrapped(completedCycle: completed)
     }
 
+    /// Jumps to the slide containing `id` in the current cycle, for resuming a
+    /// slideshow where it was left. Returns false (position unchanged) if the
+    /// photo isn't in the sequence.
+    @discardableResult
+    public mutating func seek(to id: AssetID) -> Bool {
+        guard let item = items.firstIndex(of: id),
+              let orderIndex = cycleOrder.firstIndex(of: item),
+              let slide = cycleSlides.firstIndex(where: { $0.contains(orderIndex) })
+        else { return false }
+        slideIndex = slide
+        return true
+    }
+
+    /// The photos before the current slide in this cycle.
+    public var passedIDs: [AssetID] {
+        cycleOrder[..<position].map { items[$0] }
+    }
+
     /// Moves back one slide within the current cycle. Returns false at the cycle start.
     public mutating func retreat() -> Bool {
         guard slideIndex > 0 else { return false }

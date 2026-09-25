@@ -523,4 +523,42 @@ struct SlideshowControllerTests {
         #expect(h.controller.phase == .idle)
         #expect(h.scheduler.pendingCount == 0)
     }
+
+    // MARK: Resume
+
+    @Test("Resuming starts at the saved photo and counts earlier photos as shown")
+    func resumeAtPhoto() async {
+        let harness = Harness(autoComplete: true)
+        let items = ids(5)
+        harness.controller.start(
+            assetIDs: items,
+            settings: SlideshowSettings(slideDuration: .seconds(8), order: .sequential, loops: true),
+            resumeAt: items[3]
+        )
+        await harness.waitForShowing(items[3], position: 3)
+        harness.tick(8)
+        await harness.waitForShowing(items[4], position: 4)
+        harness.tick(8)
+        await harness.waitForShowing(items[0], position: 0)
+        #expect(harness.controller.lastCycleReport?.isComplete == true)
+    }
+
+    @Test("A saved seed reproduces the shuffle order")
+    func resumeShuffleSeed() {
+        let harness = Harness(seed: 77)
+        let items = ids(30)
+        harness.start(items, order: .shuffled)
+        let order = harness.controller.currentCycleIDs
+        #expect(harness.controller.seed == 77)
+
+        let other = Harness(seed: 1)
+        other.controller.start(
+            assetIDs: items,
+            settings: SlideshowSettings(order: .shuffled),
+            resumeAt: order[10],
+            seed: 77
+        )
+        #expect(other.controller.currentCycleIDs == order)
+        #expect(other.controller.targetPosition == 10)
+    }
 }

@@ -94,6 +94,9 @@ public final class SlideshowController {
     public private(set) var isNetworkAvailable = true
     public private(set) var diagnostics = PlaybackDiagnostics()
     public private(set) var settings: SlideshowSettings
+    /// Shuffle seed of the current session; passing it back to `start` with the
+    /// same photos reproduces the same order, so a shuffled slideshow can resume.
+    public private(set) var seed: UInt64 = 0
 
     /// Whether the screen should be kept awake right now.
     public var wantsDisplayAwake: Bool {
@@ -174,7 +177,16 @@ public final class SlideshowController {
     ///
     /// - Parameter pairable: Photos that may share a slide with an adjacent
     ///   pairable photo (vertical photos when side-by-side pairing is on).
-    public func start(assetIDs: [AssetID], pairable: Set<AssetID> = [], settings: SlideshowSettings? = nil) {
+    /// - Parameter resumeAt: Starts on the slide containing this photo, if it's
+    ///   still in the album. Photos before it count as shown for this cycle.
+    /// - Parameter seed: Shuffle seed to reuse (see `seed`); random when nil.
+    public func start(
+        assetIDs: [AssetID],
+        pairable: Set<AssetID> = [],
+        settings: SlideshowSettings? = nil,
+        resumeAt: AssetID? = nil,
+        seed: UInt64? = nil
+    ) {
         stop()
         if let settings { self.settings = settings }
         sessionID += 1
@@ -194,13 +206,21 @@ public final class SlideshowController {
             self?.handle(event, session: session)
         }
         self.buffer = buffer
-        sequence = PlaybackSequence(
+        let seed = seed ?? seedSource()
+        self.seed = seed
+        var sequence = PlaybackSequence(
             items: assetIDs,
             order: self.settings.order,
             loops: self.settings.loops,
-            seed: seedSource(),
+            seed: seed,
             pairable: pairable
         )
+        if let resumeAt, sequence.seek(to: resumeAt) {
+            // Shown in the earlier session; keeps the cycle report accurate.
+            displayedThisCycle = Set(sequence.passedIDs)
+            StillroomLog.playback.info("Resuming at photo \(sequence.position + 1)")
+        }
+        self.sequence = sequence
         total = assetIDs.count
         phase = .loading
         StillroomLog.playback.info(

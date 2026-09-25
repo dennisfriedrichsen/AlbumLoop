@@ -9,8 +9,11 @@ struct SlideshowScreen: View {
     let order: AlbumOrder
     let settings: SlideshowSettings
     let style: VerticalPhotoStyle
+    /// Where to pick up a slideshow that was left part way through.
+    var resume: ResumePoint?
 
     @Environment(PhotoLibraryModel.self) private var library
+    @Environment(RecentPlaybackStore.self) private var recents
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var controller: SlideshowController?
@@ -57,11 +60,14 @@ struct SlideshowScreen: View {
         .onChange(of: controller?.wantsDisplayAwake ?? false, initial: true) {
             updateIdleTimer()
         }
+        .onChange(of: controller?.targetPosition) { recordProgress() }
+        .onChange(of: controller?.phase) { recordProgress() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             controller?.handleMemoryPressure()
         }
         .onDisappear {
             library.defersAlbumRescans = false
+            recordProgress()
             controller?.stop()
             network.stop()
             UIApplication.shared.isIdleTimerDisabled = false
@@ -90,7 +96,13 @@ struct SlideshowScreen: View {
         )
         controller.networkAvailabilityChanged(network.isAvailable)
         self.controller = controller
-        controller.start(assetIDs: snapshot.ids, pairable: pairable(snapshot))
+        controller.start(
+            assetIDs: snapshot.ids,
+            pairable: pairable(snapshot),
+            resumeAt: resume.map { AssetID($0.assetID) },
+            seed: resume?.seed
+        )
+        recordProgress()
         StillroomLog.playback.info(
             "Display target \(size.width)×\(size.height) px, style \(style.rawValue), \(snapshot.verticalIDs.count) vertical photos"
         )
@@ -137,9 +149,66 @@ struct SlideshowScreen: View {
         }
     }
 
+    /// Saves where playback is so the Recently Played row can resume it.
+    /// Called on every slide change, since the app may be terminated in the background.
+    private func recordProgress() {
+        guard let controller, controller.total > 0 else { return }
+        #if DEBUG
+        if DemoImageProvider.isEnabled { return }
+        #endif
+        var point: ResumePoint?
+        if controller.phase != .finished, controller.targetPosition > 0, let id = controller.currentTargetID {
+            point = ResumePoint(
+                assetID: id.rawValue,
+                position: controller.targetPosition,
+                total: controller.total,
+                albumOrder: order,
+                shuffled: controller.settings.order == .shuffled,
+                seed: controller.seed
+            )
+        }
+        recents.record(albumID: album.id, resume: point)
+    }
+
     private func exit() {
+        recordProgress()
         controller?.stop()
         UIApplication.shared.isIdleTimerDisabled = false
         dismiss()
     }
+}
+
+/// Starts or resumes an album's slideshow with the saved slideshow settings.
+/// A resumed slideshow keeps the order and shuffle it was playing with, so it
+/// continues through the same sequence of photos.
+struct SlideshowLaunch: View {
+    let album: AlbumSummary
+    let resume: ResumePoint?
+
+    @AppStorage(SettingsKey.slideSeconds) private var slideSeconds = SettingsDefault.slideSeconds
+    @AppStorage(SettingsKey.shuffle) private var shuffle = false
+    @AppStorage(SettingsKey.loop) private var loop = true
+    @AppStorage(SettingsKey.albumOrder) private var albumOrder = AlbumOrder.album
+    @AppStorage(SettingsKey.verticalStyle) private var verticalStyle = VerticalPhotoStyle.recommended
+
+    var body: some View {
+        SlideshowScreen(
+            album: album,
+            order: resume?.albumOrder ?? albumOrder,
+            settings: SlideshowSettings(
+                slideDuration: .seconds(slideSeconds),
+                order: (resume?.shuffled ?? shuffle) ? .shuffled : .sequential,
+                loops: loop
+            ),
+            style: verticalStyle,
+            resume: resume
+        )
+    }
+}
+
+/// A request to present a slideshow, for `fullScreenCover(item:)`.
+struct SlideshowRequest: Identifiable {
+    let id = UUID()
+    let album: AlbumSummary
+    let resume: ResumePoint?
 }
