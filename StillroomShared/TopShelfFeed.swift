@@ -4,7 +4,7 @@ import Foundation
 /// their cover images, shared through the App Group. The extension can't read
 /// Photos itself, so the app saves each cover as a small JPEG in the group container.
 enum TopShelfFeed {
-    static let appGroup = "group.com.dennisfriedrichsen.Stillroom"
+    static let appGroup = "group.com.friedrichsenweb.Stillroom"
     static let urlScheme = "stillroom"
 
     struct Item: Codable, Hashable, Sendable {

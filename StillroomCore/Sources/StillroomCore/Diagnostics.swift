@@ -8,7 +8,7 @@ import os
 /// is configured, to a small rotating file in the app's caches so problems
 /// can be diagnosed after the fact (copy it off with `devicectl`).
 public enum StillroomLog {
-    public static let subsystem = "com.dennisfriedrichsen.Stillroom"
+    public static let subsystem = "com.friedrichsenweb.Stillroom"
     public static let library = StillroomLogger(category: "library")
     public static let loading = StillroomLogger(category: "loading")
     public static let playback = StillroomLogger(category: "playback")

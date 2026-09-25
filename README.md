@@ -109,7 +109,7 @@ You do **not** need a paid membership to run Stillroom on your own Apple TV.
 | How long an install keeps working | **7 days.** The provisioning profile expires; after that the app won't launch until you build and run again from Xcode. | 1 year (development profile) |
 | Limits | Up to 3 devices and 10 App IDs, both expiring after 7 days; up to 3 of your apps per device | 100 devices of each type per year |
 | TestFlight / App Store | No | Yes |
-| Capabilities this app needs | Photos permission (no entitlement) an **App Group** (`group.com.dennisfriedrichsen.Stillroom`) shared with the Top Shelf extension, and **iCloud key-value storage** for syncing Recently Played between Apple TVs. Automatic signing creates the group; if you change the bundle identifier, change the group in `Config/*.entitlements` and `StillroomShared/TopShelfFeed.swift` to match | Same |
+| Capabilities this app needs | Photos permission (no entitlement) an **App Group** (`group.com.friedrichsenweb.Stillroom`) shared with the Top Shelf extension, and **iCloud key-value storage** for syncing Recently Played between Apple TVs. Automatic signing creates the group; if you change the bundle identifier, change the group in `Config/*.entitlements` and `StillroomShared/TopShelfFeed.swift` to match | Same |
 
 Limits are from Apple's [membership comparison](https://developer.apple.com/support/compare-memberships/) page, checked 2026‑09‑22. With a free account, plan to reinstall from Xcode about once a week. The paid program mainly buys a 1‑year install and TestFlight, which lets the Apple TV install updates itself.
 
@@ -118,7 +118,7 @@ Limits are from Apple's [membership comparison](https://developer.apple.com/supp
 1. Xcode › Settings › Accounts › **+** › Apple Account, and sign in. A free account appears as "*Your Name* (Personal Team)."
 2. In the project navigator select **Stillroom** › target **Stillroom** › **Signing & Capabilities**.
 3. Keep **Automatically manage signing** on, and choose your team.
-4. If Xcode says the bundle identifier `com.dennisfriedrichsen.Stillroom` is unavailable, change it to something unique, such as `com.<yourname>.Stillroom`.
+4. If Xcode says the bundle identifier `com.friedrichsenweb.Stillroom` is unavailable, change it to something unique, such as `com.<yourname>.Stillroom`.
 
 ### 3. Pair the Apple TV with Xcode (one time)
 
@@ -274,11 +274,11 @@ Swift concurrency runs `async` code on a thread pool with one thread per CPU cor
 ### Diagnostics and privacy
 
 - **Diagnostics overlay** (turn on in album settings): session, cycle, position, eligible album count, displayed / buffered / loading / pending / failed / skipped / removed counts, decoded memory versus budget, retries, stale callbacks, network state, and the last few requests with attempt number, duration, and outcome.
-- **Logging:** `os.Logger`, subsystem `com.dennisfriedrichsen.Stillroom`, categories `library`, `loading`, and `playback`. Asset identifiers are logged only as short one-way hashes; image contents are never logged. Nothing leaves the device. To stream logs from a paired Apple TV, use Console.app and filter on that subsystem.
+- **Logging:** `os.Logger`, subsystem `com.friedrichsenweb.Stillroom`, categories `library`, `loading`, and `playback`. Asset identifiers are logged only as short one-way hashes; image contents are never logged. Nothing leaves the device. To stream logs from a paired Apple TV, use Console.app and filter on that subsystem.
 - **On-device log file:** the same info-level messages (launch with app version, model and tvOS version; each request, load time and failure; each wait, display, stall, pause and navigation) are also written to `Library/Caches/Diagnostics/stillroom.log` in the app's container. It rotates at 400 KB (one previous file is kept), lives in purgeable Caches, and is never uploaded. After a problem, copy it off the paired Apple TV without restarting the app:
 
 ```bash
-xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDataContainer --domain-identifier com.dennisfriedrichsen.Stillroom --source Library/Caches/Diagnostics/stillroom.log --destination ./stillroom.log
+xcrun devicectl device copy from --device "Living Room (3)" --domain-type appDataContainer --domain-identifier com.friedrichsenweb.Stillroom --source Library/Caches/Diagnostics/stillroom.log --destination ./stillroom.log
 ```
 
 - **Loading indicator:** after 10 seconds of waiting, the "Loading…" or "retrying…" text also shows the elapsed time and the attempt number (for example "15 s · attempt 3 of 4"), so a slow download is distinguishable from a stuck one.

@@ -367,7 +367,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom;
+				PRODUCT_BUNDLE_IDENTIFIER = com.friedrichsenweb.Stillroom;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -398,7 +398,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom;
+				PRODUCT_BUNDLE_IDENTIFIER = com.friedrichsenweb.Stillroom;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -424,7 +424,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom.TopShelf;
+				PRODUCT_BUNDLE_IDENTIFIER = com.friedrichsenweb.Stillroom.TopShelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -451,7 +451,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dennisfriedrichsen.Stillroom.TopShelf;
+				PRODUCT_BUNDLE_IDENTIFIER = com.friedrichsenweb.Stillroom.TopShelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

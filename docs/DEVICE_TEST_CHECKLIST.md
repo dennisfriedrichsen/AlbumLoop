@@ -18,7 +18,7 @@ Record each result as ✅ / ❌ / ⚠️ with notes, and keep the filled-in copy
 
 - [ ] **0.1** Apple TV: Settings › Users and Accounts › *you* › iCloud › **iCloud Photos is on**. Note how long ago it was turned on.
 - [ ] **0.2** Apple TV storage: Settings › General › Storage (or equivalent). Note the free space before testing: ______
-- [ ] **0.3** Install Stillroom from Xcode (see README). On the Mac, open Console.app, select the Apple TV, filter on `subsystem:com.dennisfriedrichsen.Stillroom`, and start streaming.
+- [ ] **0.3** Install Stillroom from Xcode (see README). On the Mac, open Console.app, select the Apple TV, filter on `subsystem:com.friedrichsenweb.Stillroom`, and start streaming.
 - [ ] **0.4** Pick a **large test album** (ideally several hundred photos) that includes photos you haven't viewed on the Apple TV recently, so they're likely to be cloud-only. Note its photo count as shown in Photos on iPhone or Mac, and how many of its items are videos.
 
 ## 1. Permissions and states
