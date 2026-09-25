@@ -70,7 +70,7 @@ The app has no third-party dependencies.
 
 ### App icon
 
-The app uses the selected Stillroom icon: two interwoven frames with a saturated violet-to-cyan gradient. The approved source is `design/app-icon-options/stillroom-b-vibrant.png`. Regenerate the Home screen (400×240 and 800×480) and App Store (1280×768) assets from the repository root with `swift scripts/export-app-icon.swift`.
+The app uses the selected Stillroom icon: two interwoven frames with a saturated violet-to-cyan gradient. The approved source is `design/app-icon-options/stillroom-b-vibrant.png`. Regenerate the Home screen (400×240 and 800×480) and App Store (1280×768) assets from the repository root with `swift scripts/export-app-icon.swift`. The static Top Shelf images (shown when nothing has been played yet) come from the same source; regenerate them with `swift scripts/export-top-shelf.swift`.
 
 The artwork is flattened into the back layer with a transparent front layer to preserve the approved design; it does not have separate foreground parallax. The app name and Top Shelf artwork remain unchanged.
 
